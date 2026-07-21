@@ -23,14 +23,20 @@ from app.domain.schemas import (
     ImportCreateRequest,
     ImportJobResponse,
     MockPipelineRequest,
+    OutfitPlanResponse,
+    OutfitRecommendationResponse,
+    OutfitRecommendRequest,
     ProvenanceResponse,
     UploadFinalizeResponse,
     UploadPresignRequest,
     UploadPresignResponse,
+    WearEventResponse,
+    WearRequest,
 )
 from app.providers.gmi import GMICloudCapabilityClient
 from app.services.storage import LocalObjectStorage
 from app.workflows.milestone_one import MilestoneOneWorkflow
+from app.workflows.milestone_two import MilestoneTwoWorkflow
 from app.workflows.milestone_zero import MilestoneZeroWorkflow
 
 router = APIRouter(prefix="/v1")
@@ -42,6 +48,12 @@ def _settings(request: Request) -> Settings:
 
 def _milestone_one_workflow(request: Request) -> MilestoneOneWorkflow:
     return MilestoneOneWorkflow(request.app.state.settings, request.app.state.storage)
+
+
+def _milestone_two_workflow(request: Request) -> MilestoneTwoWorkflow:
+    return MilestoneTwoWorkflow(
+        request.app.state.settings, request.app.state.storage, request.app.state.weather
+    )
 
 
 @router.post("/uploads/presign", response_model=UploadPresignResponse, status_code=201)
@@ -179,6 +191,43 @@ async def update_garment(
     session: AsyncSession = Depends(get_session),
 ) -> GarmentResponse:
     return await _milestone_one_workflow(request).update_garment(session, garment_id, payload)
+
+
+@router.post("/outfits/recommend", response_model=OutfitRecommendationResponse, status_code=201)
+async def recommend_outfits(
+    payload: OutfitRecommendRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> OutfitRecommendationResponse:
+    return await _milestone_two_workflow(request).recommend(session, payload)
+
+
+@router.get("/outfits", response_model=list[OutfitPlanResponse])
+async def list_outfits(
+    request: Request,
+    status: str | None = Query(default=None, max_length=40),
+    session: AsyncSession = Depends(get_session),
+) -> list[OutfitPlanResponse]:
+    return await _milestone_two_workflow(request).list_outfits(session, status=status)
+
+
+@router.post("/outfits/{outfit_id}/save", response_model=OutfitPlanResponse)
+async def save_outfit(
+    outfit_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> OutfitPlanResponse:
+    return await _milestone_two_workflow(request).save_outfit(session, outfit_id)
+
+
+@router.post("/outfits/{outfit_id}/wear", response_model=WearEventResponse)
+async def record_outfit_wear(
+    outfit_id: str,
+    payload: WearRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> WearEventResponse:
+    return await _milestone_two_workflow(request).record_wear(session, outfit_id, payload)
 
 
 @router.post("/demo/mock-cutout", response_model=DemoAssetResponse, status_code=201)

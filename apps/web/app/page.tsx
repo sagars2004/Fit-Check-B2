@@ -1,4 +1,5 @@
 import { MilestoneZeroConsole } from "../components/milestone-zero-console";
+import { TodayPlanner } from "../components/today-planner";
 import { WardrobeImport } from "../components/wardrobe-import";
 
 const principles = [
@@ -14,7 +15,7 @@ export default function Home() {
         <a className="brand" href="#top" aria-label="Fit Check home">
           <span aria-hidden="true">✦</span> Fit Check
         </a>
-        <span className="nav-stage">Private closet prototype</span>
+        <span className="nav-stage">Private wardrobe copilot</span>
       </nav>
 
       <section className="hero" id="top">
@@ -25,6 +26,8 @@ export default function Home() {
           looks, and generates a selected AI preview—with the evidence trail visible at every step.
         </p>
       </section>
+
+      <TodayPlanner />
 
       <WardrobeImport />
 
@@ -44,10 +47,10 @@ export default function Home() {
 
       <section className="next-up">
         <p className="eyebrow">Next milestone</p>
-        <h2>Owned-only recommendations, then one selected preview.</h2>
+        <h2>Choose one owned look, then preview it on you.</h2>
         <p>
-          Weather-aware options will use approved wardrobe items only. A virtual try-on will remain
-          opt-in, visibly labeled as an AI preview, and linked back to its source evidence.
+          A virtual try-on will remain opt-in, visibly labeled as an AI preview, and linked back to
+          its source evidence.
         </p>
       </section>
     </main>

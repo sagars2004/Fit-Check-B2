@@ -46,6 +46,24 @@ invoke GMI or claim generative reconstruction. Live GMI cutout generation
 remains gated on the configured account capability spike and explicit model
 selection.
 
+Milestone 2 adds the **Today** planner:
+
+1. Accept a location, date, lightweight occasion/context, and optional
+   utilization preference.
+2. Use keyless Open-Meteo forecast/geocoding APIs when `WEATHER_MODE=live`, or
+   a deterministic offline forecast in mock mode.
+3. Build and validate three diverse recommendations from approved, unarchived
+   garments only. The local planner enforces top+bottom or one-piece
+   completeness, cold/rain outerwear rules, no cold/rain shorts, recent-wear
+   avoidance, and palette/occasion scoring.
+4. Persist proposed looks, allow saving, and support reversible wear logging
+   with per-garment wear counts and cost-per-wear (shown only when both price
+   and a non-zero wear count exist). No image generation runs during planning.
+
+The planner intentionally does not use a GMI LLM until the account capability
+spike selects a validated structured-output model. Its deterministic rules are
+the safety boundary that keeps recommendations owned-only today.
+
 ## Concise audit and build plan
 
 The repository began as a clean baseline with only a product blurb and license;
@@ -60,7 +78,7 @@ The implementation is sequenced as follows:
    source-hash dedupe, review queue, evidence records, deterministic source-cutout
    QA, conservative duplicate review, and closet metadata editing.
 3. **Today** — Open-Meteo context, deterministic owned-only outfit constraints,
-   three diverse recommendations, saved looks, and wear/ROI logging.
+   three diverse recommendations, saved looks, and reversible wear logging.
 4. **Selected preview and provenance** — consented reference photos, one
    selected-look preview, retries/fallback, and the full provenance explorer.
 5. **Polish and submission** — failure/empty states, demo data, accessibility,
@@ -134,6 +152,11 @@ The initial import UI accepts JPG, PNG, and WebP files up to the configured
 `MAX_UPLOAD_BYTES` value (15 MB by default). Each successful local upload is
 normalized and ready for review before an import job is created. Failed files
 remain isolated from other selected photos.
+
+The Today UI defaults to a deterministic offline weather snapshot. Set
+`WEATHER_MODE=live` to enable the server-side, keyless Open-Meteo lookup; if a
+live lookup fails, Fit Check labels and falls back to the deterministic forecast
+instead of silently presenting it as live weather.
 
 ## Environment configuration
 

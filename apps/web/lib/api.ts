@@ -167,6 +167,65 @@ export type GarmentUpdate = {
   archive?: boolean;
 };
 
+export type WeatherSnapshot = {
+  location: string;
+  forecast_date: string;
+  low_c: number;
+  high_c: number;
+  apparent_high_c: number;
+  precipitation_probability: number;
+  precipitation_mm: number;
+  weather_code: number;
+  wind_kph: number;
+  condition: string;
+  source: string;
+  advisory: string | null;
+};
+
+export type OutfitItem = {
+  garment_id: string;
+  role: "top" | "bottom" | "one_piece" | "outerwear" | "footwear" | "accessory" | string;
+  name: string;
+  category: string;
+  colors: string[];
+  tags: string[];
+  wear_count: number;
+  price: number | null;
+  cost_per_wear: number | null;
+  evidence_status: "verified_source_backed" | "ai_reconstructed" | "needs_better_photo" | string;
+  image_url: string | null;
+};
+
+export type OutfitPlan = {
+  id: string;
+  title: string;
+  weather: WeatherSnapshot;
+  occasion: string;
+  score: number;
+  reasoning: string;
+  status: "proposed" | "saved" | "worn" | string;
+  planner_run_id: string | null;
+  items: OutfitItem[];
+  created_at: string;
+};
+
+export type OutfitRecommendation = {
+  weather: WeatherSnapshot;
+  occasion: string;
+  options: OutfitPlan[];
+  warnings: string[];
+};
+
+export type WearEvent = {
+  event_id: string;
+  outfit_id: string;
+  action: "wear" | "undo";
+  worn_on: string;
+  outfit_status: string;
+  garment_wear_counts: Record<string, number>;
+  garment_cost_per_wear: Record<string, number | null>;
+};
+
 export async function getHealth(): Promise<Health> {
   return requestJson<Health>("/health");
 }
@@ -289,6 +348,38 @@ export async function decideDuplicateReview(
   return requestJson<DuplicateReview>(`/v1/duplicate-reviews/${reviewId}`, {
     method: "PATCH",
     body: JSON.stringify({ action }),
+  });
+}
+
+export async function recommendOutfits(request: {
+  location?: string;
+  forecast_date: string;
+  occasion: string;
+  utilization_mode: boolean;
+}): Promise<OutfitRecommendation> {
+  return requestJson<OutfitRecommendation>("/v1/outfits/recommend", {
+    method: "POST",
+    body: JSON.stringify(request),
+  });
+}
+
+export async function getOutfits(status?: string): Promise<OutfitPlan[]> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return requestJson<OutfitPlan[]>(`/v1/outfits${query}`);
+}
+
+export async function saveOutfit(outfitId: string): Promise<OutfitPlan> {
+  return requestJson<OutfitPlan>(`/v1/outfits/${outfitId}/save`, { method: "POST" });
+}
+
+export async function recordOutfitWear(
+  outfitId: string,
+  action: "wear" | "undo",
+  wornOn: string,
+): Promise<WearEvent> {
+  return requestJson<WearEvent>(`/v1/outfits/${outfitId}/wear`, {
+    method: "POST",
+    body: JSON.stringify({ action, worn_on: wornOn }),
   });
 }
 

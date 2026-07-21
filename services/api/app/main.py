@@ -15,6 +15,7 @@ from app.db.session import Database
 from app.domain.schemas import HealthResponse
 from app.providers.factory import build_media_orchestrator
 from app.services.storage import build_storage
+from app.services.weather import WeatherService
 
 
 def create_app(runtime_settings: Settings | None = None) -> FastAPI:
@@ -31,6 +32,7 @@ def create_app(runtime_settings: Settings | None = None) -> FastAPI:
         app.state.database = database
         app.state.storage = build_storage(settings)
         app.state.orchestrator = build_media_orchestrator(settings)
+        app.state.weather = WeatherService(settings)
         yield
         await database.dispose()
 
@@ -72,6 +74,10 @@ def create_app(runtime_settings: Settings | None = None) -> FastAPI:
             "CUTOUT_NOT_FOUND": 404,
             "CUTOUT_NOT_APPROVABLE": 409,
             "DUPLICATE_REVIEW_NOT_FOUND": 404,
+            "INSUFFICIENT_APPROVED_GARMENTS": 409,
+            "OUTFIT_NOT_FOUND": 404,
+            "OUTFIT_EMPTY": 409,
+            "WEAR_EVENT_NOT_FOUND": 404,
         }.get(exc.code, 422)
         return JSONResponse(status_code=status_code, content=exc.as_dict())
 

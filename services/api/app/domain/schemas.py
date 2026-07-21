@@ -185,3 +185,75 @@ class GarmentResponse(BaseModel):
     canonical_asset_id: str | None = None
     cutouts: list[GarmentAssetResponse] = Field(default_factory=list)
     created_at: datetime
+
+
+class WeatherSnapshotResponse(BaseModel):
+    location: str
+    forecast_date: date
+    low_c: float
+    high_c: float
+    apparent_high_c: float
+    precipitation_probability: int
+    precipitation_mm: float
+    weather_code: int
+    wind_kph: float
+    condition: str
+    source: str
+    advisory: str | None = None
+
+
+class OutfitRecommendRequest(BaseModel):
+    location: str | None = Field(default=None, min_length=2, max_length=255)
+    forecast_date: date = Field(default_factory=date.today)
+    occasion: str = Field(default="Everyday", min_length=2, max_length=500)
+    utilization_mode: bool = False
+
+
+class OutfitItemResponse(BaseModel):
+    garment_id: str
+    role: str
+    name: str
+    category: str
+    colors: list[str]
+    tags: list[str]
+    wear_count: int
+    price: float | None
+    cost_per_wear: float | None = None
+    evidence_status: str
+    image_url: str | None = None
+
+
+class OutfitPlanResponse(BaseModel):
+    id: str
+    title: str
+    weather: WeatherSnapshotResponse
+    occasion: str
+    score: float
+    reasoning: str
+    status: str
+    planner_run_id: str | None
+    items: list[OutfitItemResponse]
+    created_at: datetime
+
+
+class OutfitRecommendationResponse(BaseModel):
+    weather: WeatherSnapshotResponse
+    occasion: str
+    options: list[OutfitPlanResponse]
+    warnings: list[str] = Field(default_factory=list)
+
+
+class WearRequest(BaseModel):
+    action: Literal["wear", "undo"] = "wear"
+    worn_on: date = Field(default_factory=date.today)
+    notes: str | None = Field(default=None, max_length=2_000)
+
+
+class WearEventResponse(BaseModel):
+    event_id: str
+    outfit_id: str
+    action: Literal["wear", "undo"]
+    worn_on: date
+    outfit_status: str
+    garment_wear_counts: dict[str, int]
+    garment_cost_per_wear: dict[str, float | None]

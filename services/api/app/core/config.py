@@ -71,6 +71,8 @@ class Settings(BaseSettings):
     nvidia_api_key: SecretStr | None = None
     nvidia_fallback_image_model: str | None = None
     weather_provider: Literal["open-meteo"] = "open-meteo"
+    weather_mode: Literal["mock", "live"] = "mock"
+    weather_request_timeout_seconds: int = Field(default=8, ge=2, le=30)
     daily_generation_quota: int = Field(default=3, ge=1, le=100)
     max_concurrent_generations: int = Field(default=2, ge=1, le=10)
     sentry_dsn: str | None = None
