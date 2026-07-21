@@ -8,13 +8,37 @@ const principles = [
   ["Provenance as a feature", "Assets retain their source, transformations, provider, run, and manifest."],
 ];
 
+const demoSteps = [
+  {
+    href: "#closet",
+    title: "Start with evidence",
+    copy: "Load the safe mock wardrobe or import private outfit photos. Nothing becomes owned inventory without review.",
+  },
+  {
+    href: "#today",
+    title: "Plan from what is owned",
+    copy: "Generate weather- and occasion-aware options using approved garments only.",
+  },
+  {
+    href: "#try-on-studio",
+    title: "Request one clear preview",
+    copy: "Select one look, consent to a separate reference photo, and review the AI visualization with its evidence.",
+  },
+];
+
 export default function Home() {
   return (
-    <main>
+    <main id="main-content" tabIndex={-1}>
+      <a className="skip-link" href="#closet">Skip to the wardrobe workflow</a>
       <nav className="top-nav" aria-label="Primary">
         <a className="brand" href="#top" aria-label="Fit Check home">
           <span aria-hidden="true">✦</span> Fit Check
         </a>
+        <div className="nav-links">
+          <a href="#closet">Closet</a>
+          <a href="#today">Today</a>
+          <a href="#try-on-studio">Preview</a>
+        </div>
         <span className="nav-stage">Private wardrobe copilot</span>
       </nav>
 
@@ -25,11 +49,33 @@ export default function Home() {
           Fit Check turns outfit photos into a reviewable closet, creates useful weather-aware
           looks, and generates a selected AI preview—with the evidence trail visible at every step.
         </p>
+        <div className="hero-actions">
+          <a className="primary-link" href="#closet">Start the demo</a>
+          <a className="text-link" href="#demo-journey">See the three-step flow</a>
+        </div>
       </section>
 
-      <TodayAndPreview />
+      <section className="demo-journey" id="demo-journey" aria-labelledby="demo-journey-heading">
+        <div>
+          <p className="eyebrow">Three-minute judge flow</p>
+          <h2 id="demo-journey-heading">From a trusted closet to one accountable preview.</h2>
+        </div>
+        <ol>
+          {demoSteps.map((step, index) => (
+            <li key={step.href}>
+              <span aria-hidden="true" className="demo-step-number">{index + 1}</span>
+              <div>
+                <a href={step.href}>{step.title}</a>
+                <p>{step.copy}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
 
       <WardrobeImport />
+
+      <TodayAndPreview />
 
       <details className="foundation-details">
         <summary>Inspect the foundation provenance demo</summary>

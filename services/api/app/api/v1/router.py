@@ -15,6 +15,7 @@ from app.domain.schemas import (
     CandidateReviewRequest,
     CutoutReviewRequest,
     DemoAssetResponse,
+    DemoSeedResponse,
     DuplicateReviewDecisionRequest,
     DuplicateReviewResponse,
     GarmentAssetResponse,
@@ -40,6 +41,7 @@ from app.domain.schemas import (
 )
 from app.providers.gmi import GMICloudCapabilityClient
 from app.services.storage import LocalObjectStorage
+from app.workflows.milestone_four import MilestoneFourDemoWorkflow
 from app.workflows.milestone_one import MilestoneOneWorkflow
 from app.workflows.milestone_three import MilestoneThreeWorkflow
 from app.workflows.milestone_two import MilestoneTwoWorkflow
@@ -68,6 +70,10 @@ def _milestone_three_workflow(request: Request) -> MilestoneThreeWorkflow:
         request.app.state.storage,
         request.app.state.orchestrator,
     )
+
+
+def _milestone_four_demo_workflow(request: Request) -> MilestoneFourDemoWorkflow:
+    return MilestoneFourDemoWorkflow(request.app.state.settings, request.app.state.storage)
 
 
 @router.post("/uploads/presign", response_model=UploadPresignResponse, status_code=201)
@@ -330,6 +336,16 @@ async def create_mock_cutout(
         garment_name=payload.garment_name,
         parent_run_id=payload.parent_run_id,
     )
+
+
+@router.post("/demo/seed", response_model=DemoSeedResponse)
+async def seed_local_mock_demo(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> DemoSeedResponse:
+    """Add the synthetic local judge fixture without resetting existing data."""
+
+    return await _milestone_four_demo_workflow(request).seed(session)
 
 
 @router.get("/provenance/{entity_type}/{entity_id}", response_model=ProvenanceResponse)

@@ -26,6 +26,27 @@ export type DemoAsset = {
   created_at: string;
 };
 
+export type DemoWardrobeSeed = {
+  mode: "local_mock";
+  fixture_version: string;
+  created: boolean;
+  disclosure: string;
+  garments: Array<{
+    id: string;
+    name: string;
+    category: string;
+    status: string;
+    evidence_status: string;
+  }>;
+  fixture_garment_ids: string[];
+  approved_garment_ids: string[];
+  needs_better_photo_garment_id: string;
+  approved_garment_count: number;
+  fixture_garment_count: number;
+  profile_seeded: false;
+  reference_photo_requirement: string;
+};
+
 export type Provenance = {
   entity_type: string;
   entity_id: string;
@@ -283,6 +304,10 @@ export async function createMockCutout(): Promise<DemoAsset> {
     method: "POST",
     body: JSON.stringify({ garment_name: "Demo navy overshirt" }),
   });
+}
+
+export async function seedDemoWardrobe(): Promise<DemoWardrobeSeed> {
+  return requestJson<DemoWardrobeSeed>("/v1/demo/seed", { method: "POST" });
 }
 
 export async function getProvenance(

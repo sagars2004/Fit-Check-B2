@@ -12,7 +12,9 @@ export function TodayAndPreview() {
   const selectOutfitForPreview = useCallback((outfit: OutfitPlan) => {
     setSelectedOutfit(outfit);
     window.requestAnimationFrame(() => {
-      document.getElementById("try-on-studio")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      const studio = document.getElementById("try-on-studio");
+      studio?.scrollIntoView({ behavior: "smooth", block: "start" });
+      studio?.focus({ preventScroll: true });
     });
   }, []);
 

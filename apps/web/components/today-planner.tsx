@@ -101,7 +101,13 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
   }
 
   return (
-    <section className="today-planner" aria-labelledby="today-heading">
+    <section
+      aria-busy={isPlanning}
+      aria-labelledby="today-heading"
+      className="today-planner"
+      id="today"
+      tabIndex={-1}
+    >
       <div className="section-heading">
         <div>
           <p className="eyebrow">Milestone 2 · today</p>
@@ -196,7 +202,10 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
           </div>
         </>
       ) : (
-        <p className="empty-state">Choose a date and occasion to plan from your approved wardrobe. Held items and unreviewed candidates are excluded.</p>
+        <p className="empty-state" role="status">
+          Choose a date and occasion to plan from your approved wardrobe. Held items and unreviewed
+          candidates are excluded, and planning never creates an image.
+        </p>
       )}
     </section>
   );
@@ -281,7 +290,10 @@ function OutfitItemTile({ item }: { item: OutfitItem }) {
 }
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  const date = new Date();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 function formatDate(value: string): string {

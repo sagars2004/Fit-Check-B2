@@ -9,7 +9,7 @@ garments only, and creates a selected AI preview with a visible evidence trail.
 
 ## Current implementation status
 
-Milestones 0 through 3 are complete in safe local mock mode. The repository
+Milestones 0 through 4 are complete in safe local mock mode. The repository
 contains a working, credential-free path from a reviewable closet to one
 selected AI preview, while keeping live GMI try-on explicitly safety-gated.
 The foundation path provides:
@@ -86,6 +86,17 @@ path and a verifiable returned artifact. This prevents signed personal-image
 URLs or unverified generated media from reaching a provider while preserving
 the full mock demo path.
 
+Milestone 4 makes that local path judge-ready without fabricating live claims:
+
+1. **Load safe demo wardrobe** adds an idempotent, local-only synthetic fixture
+   with six approved source-backed garments, approved deterministic cutouts,
+   provenance records, and one intentionally held item.
+2. The web flow now leads from Closet to Today to Preview, with skip/navigation
+   links, responsive layouts, focus management, clear empty states, and retry
+   controls for recoverable API loads.
+3. The demo runbook and submission checklist separate the verified local mock
+   experience from pending B2, Genblaze, GMI, and deployment work.
+
 ## Concise audit and build plan
 
 The repository began as a clean baseline with only a product blurb and license;
@@ -104,8 +115,10 @@ The implementation is sequenced as follows:
 4. **Selected preview and provenance** — complete in mock mode: consented
    reference photos, one selected-look preview, retries/fallback, and a
    redacted provenance explorer. Live VTON remains gated on the provider spike.
-5. **Polish and submission** — next: demo data, accessibility, failure/empty
-   states, deployment checklist, and the three-minute judge flow.
+5. **Polish and submission** — complete locally: an additive synthetic demo
+   wardrobe, responsive/keyboard-friendly UI polish, recovery states, a
+   three-minute runbook, and an honest submission checklist. Deployment and
+   live-provider validation remain pending explicit authorization.
 
 ## Architecture
 
@@ -186,6 +199,19 @@ The Today UI defaults to a deterministic offline weather snapshot. Set
 `WEATHER_MODE=live` to enable the server-side, keyless Open-Meteo lookup; if a
 live lookup fails, Fit Check labels and falls back to the deterministic forecast
 instead of silently presenting it as live weather.
+
+## Demo and submission readiness
+
+Use [the local mock demo runbook](docs/demo-runbook.md) for a repeatable
+three-minute walkthrough, including the mock-only demo seed and recovery paths.
+Use [the submission checklist](docs/submission-checklist.md) to distinguish
+implemented local MVP behavior from still-pending B2, Genblaze, GMI, and
+deployment validation.
+
+Fit Check is **not deployed** and no B2 or GMI credentials have been used by
+this repository. The current public-facing claim is a credential-free local
+mock path; live personal-image preview remains blocked until the documented
+provider capability and privacy checks are authorized and pass.
 
 ## Environment configuration
 

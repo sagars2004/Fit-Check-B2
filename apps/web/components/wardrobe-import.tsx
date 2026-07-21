@@ -5,6 +5,7 @@ import { type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useS
 import {
   type Candidate,
   type CandidateReview,
+  type DemoWardrobeSeed,
   type DuplicateReview,
   type Garment,
   type GarmentUpdate,
@@ -15,8 +16,10 @@ import {
   getCandidates,
   getDuplicateReviews,
   getGarments,
+  getHealth,
   reviewCutout,
   reviewCandidate,
+  seedDemoWardrobe,
   updateGarment,
   uploadPhotos,
 } from "../lib/api";
@@ -37,11 +40,16 @@ export function WardrobeImport() {
   const [activeGarment, setActiveGarment] = useState<string | null>(null);
   const [activeCutout, setActiveCutout] = useState<string | null>(null);
   const [activeDuplicateReview, setActiveDuplicateReview] = useState<string | null>(null);
+  const [canSeedDemo, setCanSeedDemo] = useState(false);
+  const [isSeedingDemo, setIsSeedingDemo] = useState(false);
+  const [demoSeed, setDemoSeed] = useState<DemoWardrobeSeed | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
 
   const refresh = useCallback(async () => {
+    setLoadState("loading");
+    setError(null);
     try {
       const [candidateItems, garmentItems, duplicateItems] = await Promise.all([
         getCandidates(),
@@ -61,6 +69,17 @@ export function WardrobeImport() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    void getHealth()
+      .then((health) => {
+        // The seed endpoint is intentionally local-mock-only. Keep this affordance
+        // absent for B2-backed or live-provider configurations rather than relying
+        // on a rejected request to protect a real wardrobe.
+        setCanSeedDemo(health.provider_mode === "mock" && health.storage_mode === "local");
+      })
+      .catch(() => setCanSeedDemo(false));
+  }, []);
 
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -90,6 +109,30 @@ export function WardrobeImport() {
       setError(caught instanceof Error ? caught.message : "The import could not start.");
     } finally {
       setUploading(false);
+    }
+  }
+
+  async function handleSeedDemo() {
+    setIsSeedingDemo(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const seeded = await seedDemoWardrobe();
+      setDemoSeed(seeded);
+      await refresh();
+      setNotice(
+        seeded.created
+          ? `Safe demo wardrobe loaded with ${seeded.approved_garment_count} approved items.`
+          : `Safe demo wardrobe is already ready with ${seeded.approved_garment_count} approved items.`,
+      );
+    } catch (caught: unknown) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "The safe demo wardrobe could not be loaded. Your existing closet was not changed.",
+      );
+    } finally {
+      setIsSeedingDemo(false);
     }
   }
 
@@ -194,7 +237,13 @@ export function WardrobeImport() {
   const pendingDuplicateReviews = duplicateReviews.filter((review) => review.status === "pending");
 
   return (
-    <section className="wardrobe-workbench" aria-labelledby="wardrobe-heading">
+    <section
+      aria-busy={loadState === "loading" || uploading || isSeedingDemo}
+      aria-labelledby="wardrobe-heading"
+      className="wardrobe-workbench"
+      id="closet"
+      tabIndex={-1}
+    >
       <div className="section-heading">
         <div>
           <p className="eyebrow">Milestone 1 · import and closet</p>
@@ -212,6 +261,43 @@ export function WardrobeImport() {
         wardrobe. Fit Check never calls a guessed crop a verified cutout, and it never auto-merges
         similar clothes.
       </p>
+
+      {canSeedDemo ? (
+        <section className="demo-seed-panel" aria-labelledby="demo-seed-heading">
+          <div>
+            <p className="eyebrow">Quick demo · local mock mode</p>
+            <h3 id="demo-seed-heading">Need a safe wardrobe to review?</h3>
+            <p>
+              Load an idempotent sample closet with approved source-backed garments and one item
+              held for a better photo. It uses no cloud credentials and never creates a reference photo.
+            </p>
+          </div>
+          <button
+            className="secondary-button"
+            disabled={isSeedingDemo}
+            onClick={() => void handleSeedDemo()}
+            type="button"
+          >
+            {isSeedingDemo ? "Loading safe demo…" : "Load safe demo wardrobe"}
+          </button>
+        </section>
+      ) : null}
+
+      {demoSeed ? (
+        <section className="demo-seed-result" aria-labelledby="demo-seed-result-heading">
+          <div>
+            <p className="eyebrow">Demo wardrobe ready</p>
+            <h3 id="demo-seed-result-heading">
+              {demoSeed.approved_garment_count} approved owned item{demoSeed.approved_garment_count === 1 ? "" : "s"} are ready to plan.
+            </h3>
+            <p>
+              {demoSeed.disclosure} One seeded item remains held for a better photo and is excluded from recommendations.
+            </p>
+            <p className="demo-seed-note">{demoSeed.reference_photo_requirement}</p>
+          </div>
+          <a className="primary-link" href="#today">Continue to Today</a>
+        </section>
+      ) : null}
 
       <form className="upload-panel" onSubmit={(event) => void handleUpload(event)}>
         <label className="drop-zone" htmlFor="outfit-photos">
@@ -241,7 +327,16 @@ export function WardrobeImport() {
       </form>
 
       {notice ? <p className="success-message" role="status">{notice}</p> : null}
-      {error ? <p className="error-message" role="alert">{error}</p> : null}
+      {error ? (
+        <div className="error-message" role="alert">
+          <p>{error}</p>
+          {loadState === "error" ? (
+            <button className="inline-retry-button" onClick={() => void refresh()} type="button">
+              Try loading the closet again
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {importJob ? <ImportProgress job={importJob} /> : null}
 

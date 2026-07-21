@@ -29,6 +29,7 @@ type RenderSourceGarment = {
 type TryOnRenderWithSources = TryOnRender;
 
 type PreviewSourceGarment = RenderSourceGarment;
+type RetryScope = "profiles" | "renders" | null;
 
 type TryOnStudioProps = {
   outfit: OutfitPlan | null;
@@ -51,6 +52,7 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryScope, setRetryScope] = useState<RetryScope>(null);
   const [correctionHint, setCorrectionHint] = useState("");
   const [provenance, setProvenance] = useState<Provenance | null>(null);
   const [isLoadingProvenance, setIsLoadingProvenance] = useState(false);
@@ -65,6 +67,7 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
       setProfiles(await getModelProfiles());
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "Your saved reference photos could not be loaded.");
+      setRetryScope("profiles");
     } finally {
       setIsLoadingProfiles(false);
     }
@@ -79,6 +82,7 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
       }
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "The selected look's previews could not be loaded.");
+      setRetryScope("renders");
     } finally {
       setIsLoadingRenders(false);
     }
@@ -136,6 +140,7 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
     }
     setIsUploading(true);
     setError(null);
+    setRetryScope(null);
     setNotice(null);
     try {
       const profile = await uploadReferencePhoto(referenceFile);
@@ -158,23 +163,29 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
       setReferenceFile(null);
       return;
     }
-    if (!permittedReferenceTypes.has(file.type)) {
+    if (!isPermittedReferenceFile(file)) {
       setReferenceFile(null);
+      event.currentTarget.value = "";
       setError("Reference photos must be JPG, PNG, or WebP files.");
+      setRetryScope(null);
       return;
     }
     if (file.size > maxReferencePhotoSize) {
       setReferenceFile(null);
+      event.currentTarget.value = "";
       setError("Reference photos must be 15 MB or smaller.");
+      setRetryScope(null);
       return;
     }
     setError(null);
+    setRetryScope(null);
     setReferenceFile(file);
   }
 
   async function handleDeleteProfile(profileId: string) {
     setDeletingProfileId(profileId);
     setError(null);
+    setRetryScope(null);
     try {
       await deleteModelProfile(profileId);
       setProfiles((current) => current.filter((profile) => profile.id !== profileId));
@@ -194,6 +205,7 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
     }
     setIsGenerating(true);
     setError(null);
+    setRetryScope(null);
     setNotice(null);
     try {
       const priorRunId = currentRender?.status === "failed" ? currentRender.run_id ?? undefined : undefined;
@@ -221,6 +233,7 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
       // the stable error, provenance entry point, and retry state in context.
       if (activeOutfitIdRef.current === outfit.id) await refreshRenders(outfit.id);
       setError(failureMessage);
+      setRetryScope(null);
     } finally {
       setIsGenerating(false);
     }
@@ -229,6 +242,7 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
   async function handleOpenProvenance(render: TryOnRenderWithSources) {
     setIsLoadingProvenance(true);
     setError(null);
+    setRetryScope(null);
     try {
       setProvenance(await getProvenance(render.id, render.provenance_entity_type));
     } catch (caught: unknown) {
@@ -238,8 +252,27 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
     }
   }
 
+  async function handleRetryLoad() {
+    setError(null);
+    const scope = retryScope;
+    setRetryScope(null);
+    if (scope === "profiles") {
+      await refreshProfiles();
+      return;
+    }
+    if (scope === "renders" && outfitId) {
+      await refreshRenders(outfitId);
+    }
+  }
+
   return (
-    <section className="tryon-studio" id="try-on-studio" aria-labelledby="try-on-heading">
+    <section
+      aria-busy={isLoadingProfiles || isLoadingRenders || isUploading || isGenerating}
+      aria-labelledby="try-on-heading"
+      className="tryon-studio"
+      id="try-on-studio"
+      tabIndex={-1}
+    >
       <div className="section-heading">
         <div>
           <p className="eyebrow">Milestone 3 · selected AI preview</p>
@@ -256,7 +289,16 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
       </p>
 
       {notice ? <p className="success-message" role="status">{notice}</p> : null}
-      {error ? <p className="error-message" role="alert">{error}</p> : null}
+      {error ? (
+        <div className="error-message" role="alert">
+          <p>{error}</p>
+          {retryScope ? (
+            <button className="inline-retry-button" onClick={() => void handleRetryLoad()} type="button">
+              Retry loading {retryScope === "profiles" ? "reference photos" : "preview history"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="tryon-setup-grid">
         <SelectedOutfitCard outfit={outfit} onClearSelection={onClearSelection} sources={selectedOutfitSources} />
@@ -778,4 +820,9 @@ function isSensitiveProvenanceKey(key: string): boolean {
   const normalized = key.toLowerCase();
   if (normalized === "manifest_key" || normalized === "manifest_uri") return false;
   return ["prompt", "url", "token", "secret", "authorization", "api_key", "reference_image"].some((fragment) => normalized.includes(fragment));
+}
+
+function isPermittedReferenceFile(file: File): boolean {
+  if (permittedReferenceTypes.has(file.type)) return true;
+  return !file.type && /\.(jpe?g|png|webp)$/i.test(file.name);
 }

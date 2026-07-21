@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
   createMockCutout,
@@ -22,17 +22,22 @@ export function MilestoneZeroConsole() {
   const [provenance, setProvenance] = useState<Provenance | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    void getHealth()
-      .then((result) => {
-        setHealth(result);
-        setHealthState("ready");
-      })
-      .catch((caught: unknown) => {
-        setError(caught instanceof Error ? caught.message : "Unable to reach the API.");
-        setHealthState("error");
-      });
+  const loadHealth = useCallback(async () => {
+    setHealthState("loading");
+    setError(null);
+    try {
+      const result = await getHealth();
+      setHealth(result);
+      setHealthState("ready");
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "Unable to reach the API.");
+      setHealthState("error");
+    }
   }, []);
+
+  useEffect(() => {
+    void loadHealth();
+  }, [loadHealth]);
 
   async function runMockPipeline() {
     setRunState("loading");
@@ -52,7 +57,11 @@ export function MilestoneZeroConsole() {
   const infrastructureReady = healthState === "ready" && health?.provider_mode === "mock";
 
   return (
-    <section className="console-card" aria-labelledby="m0-heading">
+    <section
+      aria-busy={healthState === "loading" || runState === "loading"}
+      aria-labelledby="m0-heading"
+      className="console-card"
+    >
       <div className="console-heading">
         <div>
           <p className="eyebrow">Milestone 0 · durable media proof</p>
@@ -92,9 +101,14 @@ export function MilestoneZeroConsole() {
       </button>
 
       {error ? (
-        <p className="error-message" role="alert">
-          {error}
-        </p>
+        <div className="error-message" role="alert">
+          <p>{error}</p>
+          {healthState === "error" ? (
+            <button className="inline-retry-button" onClick={() => void loadHealth()} type="button">
+              Try the API check again
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       {asset ? (

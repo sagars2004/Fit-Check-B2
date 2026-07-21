@@ -56,6 +56,7 @@ def create_app(runtime_settings: Settings | None = None) -> FastAPI:
             "OBJECT_NOT_FOUND": 404,
             "INVALID_OBJECT_KEY": 400,
             "DEMO_ENDPOINT_DISABLED": 404,
+            "DEMO_SEED_CONFLICT": 409,
             "SMOKE_TEST_DISABLED": 403,
             "UPLOAD_NOT_FOUND": 404,
             "IMPORT_NOT_FOUND": 404,

@@ -34,6 +34,33 @@ class DemoAssetResponse(BaseModel):
     created_at: datetime
 
 
+class DemoSeedGarmentResponse(BaseModel):
+    """A synthetic fixture item returned by the local demo seed endpoint."""
+
+    id: str
+    name: str
+    category: str
+    status: str
+    evidence_status: str
+
+
+class DemoSeedResponse(BaseModel):
+    """Non-destructive local mock data prepared for the judge demo flow."""
+
+    mode: Literal["local_mock"]
+    fixture_version: str
+    created: bool
+    disclosure: str
+    garments: list[DemoSeedGarmentResponse]
+    fixture_garment_ids: list[str]
+    approved_garment_ids: list[str]
+    needs_better_photo_garment_id: str
+    approved_garment_count: int
+    fixture_garment_count: int
+    profile_seeded: Literal[False] = False
+    reference_photo_requirement: str
+
+
 class ProvenanceResponse(BaseModel):
     entity_type: str
     entity_id: str
