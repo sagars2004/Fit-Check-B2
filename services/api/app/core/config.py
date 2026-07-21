@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     b2_app_key: SecretStr | None = None
     b2_prefix: str = "fit-check"
     b2_presign_expires_seconds: int = Field(default=900, ge=60, le=3600)
+    max_upload_bytes: int = Field(default=15 * 1024 * 1024, ge=1_048_576, le=104_857_600)
 
     gmi_api_key: SecretStr | None = None
     gmi_org_id: str | None = None

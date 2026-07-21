@@ -3,8 +3,11 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 from io import BytesIO
+from typing import cast
 
-from PIL import Image, ImageChops, ImageOps
+from PIL import Image, ImageChops, ImageOps, UnidentifiedImageError
+
+from app.core.errors import FitCheckError
 
 
 @dataclass(frozen=True, slots=True)
@@ -15,6 +18,54 @@ class ImageQaResult:
     height: int
     transparent_corner_count: int
     alpha_bbox: tuple[int, int, int, int] | None
+
+
+@dataclass(frozen=True, slots=True)
+class ImageInspection:
+    width: int
+    height: int
+    image_format: str
+    content_type: str
+
+
+_SUPPORTED_IMAGE_FORMATS = {
+    "JPEG": "image/jpeg",
+    "PNG": "image/png",
+    "WEBP": "image/webp",
+}
+
+
+def inspect_upload_image(source: bytes) -> ImageInspection:
+    """Decode and identify a user image before durable processing.
+
+    Pillow performs the file-signature/decode check here, so a client supplied
+    MIME type is never accepted as proof that an upload is usable.
+    """
+
+    try:
+        with Image.open(BytesIO(source)) as image:
+            image.load()
+            normalized = ImageOps.exif_transpose(image)
+            image_format = image.format or ""
+            content_type = _SUPPORTED_IMAGE_FORMATS.get(image_format)
+            if content_type is None:
+                raise FitCheckError(
+                    "UNSUPPORTED_IMAGE",
+                    "Use a JPG, PNG, or WebP outfit photo. HEIC can be converted before upload.",
+                    recommended_action="Choose a supported image or export the photo as JPG.",
+                )
+            return ImageInspection(
+                width=normalized.width,
+                height=normalized.height,
+                image_format=image_format,
+                content_type=content_type,
+            )
+    except (UnidentifiedImageError, OSError, ValueError) as error:
+        raise FitCheckError(
+            "INVALID_IMAGE",
+            "This photo could not be decoded safely.",
+            recommended_action="Choose a different JPG, PNG, or WebP photo and try again.",
+        ) from error
 
 
 def normalize_image(source: bytes, *, output_format: str = "JPEG") -> bytes:
@@ -29,6 +80,47 @@ def normalize_image(source: bytes, *, output_format: str = "JPEG") -> bytes:
         output = BytesIO()
         normalized.save(output, format=output_format, quality=92, optimize=True)
         return output.getvalue()
+
+
+def crop_normalized_image(source: bytes, *, left: int, top: int, right: int, bottom: int) -> bytes:
+    """Create a deterministic JPEG source crop for review, never a cutout."""
+
+    with Image.open(BytesIO(source)) as image:
+        normalized = ImageOps.exif_transpose(image).convert("RGB")
+        bounded_left = max(0, min(left, normalized.width - 1))
+        bounded_top = max(0, min(top, normalized.height - 1))
+        bounded_right = max(bounded_left + 1, min(right, normalized.width))
+        bounded_bottom = max(bounded_top + 1, min(bottom, normalized.height))
+        crop = normalized.crop((bounded_left, bounded_top, bounded_right, bounded_bottom))
+        output = BytesIO()
+        crop.save(output, format="JPEG", quality=92, optimize=True)
+        return output.getvalue()
+
+
+def approximate_color_name(source: bytes) -> str:
+    """Return a deliberately coarse, deterministic color label for review."""
+
+    palette = {
+        "black": (30, 30, 30),
+        "white": (235, 235, 230),
+        "gray": (125, 125, 125),
+        "navy": (34, 55, 92),
+        "blue": (65, 120, 200),
+        "green": (68, 126, 83),
+        "red": (180, 68, 64),
+        "brown": (118, 82, 55),
+        "beige": (202, 181, 145),
+    }
+    with Image.open(BytesIO(source)) as image:
+        rgb = ImageOps.exif_transpose(image).convert("RGB").resize((1, 1))
+        red, green, blue = cast(tuple[int, int, int], rgb.getpixel((0, 0)))
+    return min(
+        palette,
+        key=lambda name: sum(
+            (component - target) ** 2
+            for component, target in zip((red, green, blue), palette[name], strict=True)
+        ),
+    )
 
 
 def chroma_to_transparent(source: bytes, *, green_bias: int = 32) -> bytes:

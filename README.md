@@ -20,7 +20,23 @@ proof of the most important infrastructure path:
 5. Inspect the run, object key, hashes, QA result, and provenance in the web UI.
 
 The mock asset is explicitly not source-backed clothing evidence. Real upload,
-review, evidence, and approval flows are Milestone 1 work.
+review, evidence, and approval flows are now available as a local Milestone 1
+workflow:
+
+1. Request a server-scoped upload target. Local mock mode uses the API; B2 mode
+   returns a short-lived, exact-key presigned URL without exposing credentials.
+2. Validate and normalize JPG, PNG, or WebP uploads; record dimensions, a
+   server-computed SHA-256, and deterministic source fingerprint.
+3. Create a reviewable, immutable source crop with deliberately conservative
+   attributes. The app never calls that crop a transparent cutout.
+4. Edit, approve, hold for a better photo, or reject each candidate. Approval
+   creates a source-backed garment plus immutable `GarmentEvidence`.
+5. Browse and edit safe closet metadata without changing source evidence or
+   provenance.
+
+The local mock import flow does not pretend to have exercised GMI cutout
+generation. Clean transparent cutouts remain gated on an approved item, alpha
+QA, and a configured model selected by the capability spike.
 
 ## Concise audit and build plan
 
@@ -33,8 +49,8 @@ The implementation is sequenced as follows:
 1. **Foundation and provider spike** — monorepo, mock mode, schema, B2/Genblaze
    interfaces, provenance, and the account-specific GMI capability probe.
 2. **Import and closet** — direct private upload, deterministic normalization and
-   dedupe, review queue, evidence records, cutout generation, QA, and closet
-   metadata editing.
+   source-hash dedupe, review queue, evidence records, cutout generation/QA
+   after provider configuration, and closet metadata editing.
 3. **Today** — Open-Meteo context, deterministic owned-only outfit constraints,
    three diverse recommendations, saved looks, and wear/ROI logging.
 4. **Selected preview and provenance** — consented reference photos, one
@@ -106,6 +122,11 @@ make typecheck
 make build
 ```
 
+The initial import UI accepts JPG, PNG, and WebP files up to the configured
+`MAX_UPLOAD_BYTES` value (15 MB by default). Each successful local upload is
+normalized and ready for review before an import job is created. Failed files
+remain isolated from other selected photos.
+
 ## Environment configuration
 
 Copy [`.env.example`](.env.example). It documents every runtime variable,
@@ -126,7 +147,9 @@ B2_REGION=...
 ```
 
 You may keep `PROVIDER_MODE=mock` while validating B2 persistence without using
-any GMI credits. Object keys follow the PRD layout under
+any GMI credits. In this mode, `POST /v1/uploads/presign` returns a scoped B2
+upload URL; the server then reads, hashes, validates, and normalizes the object
+before it can enter an import job. Object keys follow the PRD layout under
 `fit-check/users/{user_id}/...`, including uploads, crops, masks, cutouts,
 looks, manifests, and exports.
 
@@ -167,7 +190,10 @@ is at [0001_milestone_zero.py](services/api/app/db/migrations/versions/0001_mile
 
 Every generated asset records its input/output SHA-256, provider/model, redacted
 prompt template, parameters, QA result, run and parent-run IDs, object key, and
-manifest hash. The current provenance endpoint never persists signed URLs.
+manifest hash. Imported candidates preserve their original upload/source crop
+and carry one of three visible evidence states: `verified_source_backed`,
+`ai_reconstructed`, or `needs_better_photo`. The current provenance endpoint
+never persists signed URLs.
 
 ## Attribution
 

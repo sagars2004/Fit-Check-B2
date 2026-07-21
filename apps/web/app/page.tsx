@@ -1,4 +1,5 @@
 import { MilestoneZeroConsole } from "../components/milestone-zero-console";
+import { WardrobeImport } from "../components/wardrobe-import";
 
 const principles = [
   ["Owned-first", "Recommendations will be constrained to approved wardrobe items."],
@@ -13,7 +14,7 @@ export default function Home() {
         <a className="brand" href="#top" aria-label="Fit Check home">
           <span aria-hidden="true">✦</span> Fit Check
         </a>
-        <span className="nav-stage">Foundation build</span>
+        <span className="nav-stage">Private closet prototype</span>
       </nav>
 
       <section className="hero" id="top">
@@ -25,7 +26,12 @@ export default function Home() {
         </p>
       </section>
 
-      <MilestoneZeroConsole />
+      <WardrobeImport />
+
+      <details className="foundation-details">
+        <summary>Inspect the foundation provenance demo</summary>
+        <MilestoneZeroConsole />
+      </details>
 
       <section className="principles" aria-label="Product principles">
         {principles.map(([title, description]) => (
@@ -38,13 +44,12 @@ export default function Home() {
 
       <section className="next-up">
         <p className="eyebrow">Next milestone</p>
-        <h2>Import, review, and a real owned-garment closet.</h2>
+        <h2>Owned-only recommendations, then one selected preview.</h2>
         <p>
-          Direct private uploads, content hashing, candidate review, conservative duplicate
-          suggestions, and deterministic cutout quality checks are intentionally next—not skipped.
+          Weather-aware options will use approved wardrobe items only. A virtual try-on will remain
+          opt-in, visibly labeled as an AI preview, and linked back to its source evidence.
         </p>
       </section>
     </main>
   );
 }
-

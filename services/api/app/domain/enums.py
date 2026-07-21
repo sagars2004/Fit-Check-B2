@@ -12,6 +12,7 @@ class GarmentStatus(StrEnum):
     DUPLICATE_PENDING = "duplicate_pending"
     ARCHIVED = "archived"
     DELETED = "deleted"
+    REJECTED = "rejected"
 
 
 class AssetEvidenceStatus(StrEnum):

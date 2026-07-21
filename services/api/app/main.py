@@ -44,7 +44,7 @@ def create_app(runtime_settings: Settings | None = None) -> FastAPI:
         CORSMiddleware,
         allow_origins=[settings.web_origin],
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PATCH", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["Content-Type", "X-Request-ID"],
     )
 
@@ -55,6 +55,19 @@ def create_app(runtime_settings: Settings | None = None) -> FastAPI:
             "INVALID_OBJECT_KEY": 400,
             "DEMO_ENDPOINT_DISABLED": 404,
             "SMOKE_TEST_DISABLED": 403,
+            "UPLOAD_NOT_FOUND": 404,
+            "IMPORT_NOT_FOUND": 404,
+            "CANDIDATE_NOT_FOUND": 404,
+            "GARMENT_NOT_FOUND": 404,
+            "UNSUPPORTED_UPLOAD_TYPE": 400,
+            "UNSUPPORTED_IMAGE": 400,
+            "INVALID_IMAGE": 400,
+            "EMPTY_UPLOAD": 400,
+            "UPLOAD_TOO_LARGE": 413,
+            "UPLOAD_NOT_COMPLETE": 409,
+            "UPLOAD_NOT_READY": 409,
+            "CANDIDATE_NOT_APPROVABLE": 409,
+            "LOCAL_UPLOAD_ENDPOINT_DISABLED": 404,
         }.get(exc.code, 422)
         return JSONResponse(status_code=status_code, content=exc.as_dict())
 

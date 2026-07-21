@@ -38,6 +38,18 @@ class ObjectKeys:
             f"{self._user_root(user_id)}/uploads/{_segment(upload_id, 'upload_id')}/normalized.jpg"
         )
 
+    def candidate_source_crop(self, user_id: str, upload_id: str, candidate_id: str) -> str:
+        """Keep pre-approval evidence under the upload that produced it.
+
+        A candidate does not yet have a canonical garment ID, so this avoids
+        pretending an unreviewed extraction is already wardrobe inventory.
+        """
+
+        return (
+            f"{self._user_root(user_id)}/uploads/{_segment(upload_id, 'upload_id')}/"
+            f"candidates/{_segment(candidate_id, 'candidate_id')}/source-crop.jpg"
+        )
+
     def garment_source_crop(self, user_id: str, garment_id: str, crop_id: str) -> str:
         return (
             f"{self._user_root(user_id)}/garments/{_segment(garment_id, 'garment_id')}/"
