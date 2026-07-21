@@ -9,8 +9,8 @@ garments only, and creates a selected AI preview with a visible evidence trail.
 
 ## Current implementation status
 
-Milestone 0 is complete. This repository now contains a working, credential-free
-proof of the most important infrastructure path:
+Milestones 0 and 1 are complete. This repository now contains a working,
+credential-free proof of the most important infrastructure path:
 
 1. Generate a deliberately generic **AI-reconstructed** mock garment cutout.
 2. Validate that the PNG is RGBA, has transparent corners, and is not clipped.
@@ -31,12 +31,20 @@ workflow:
    attributes. The app never calls that crop a transparent cutout.
 4. Edit, approve, hold for a better photo, or reject each candidate. Approval
    creates a source-backed garment plus immutable `GarmentEvidence`.
-5. Browse and edit safe closet metadata without changing source evidence or
+5. Run deterministic chroma removal and technical alpha QA only after a garment
+   has been approved. A passing derivative remains `awaiting_review` until the
+   owner approves it; a failed or rejected derivative is visibly held as
+   `needs_better_photo`.
+6. Compare approved cutouts conservatively using a local 16×16 luminance
+   signature. A close match creates a human review record only: no automatic
+   merge, archive, deletion, or ownership change is possible.
+7. Browse and edit safe closet metadata without changing source evidence or
    provenance.
 
-The local mock import flow does not pretend to have exercised GMI cutout
-generation. Clean transparent cutouts remain gated on an approved item, alpha
-QA, and a configured model selected by the capability spike.
+The local mock cutout flow is deterministic and source-derived; it does not
+invoke GMI or claim generative reconstruction. Live GMI cutout generation
+remains gated on the configured account capability spike and explicit model
+selection.
 
 ## Concise audit and build plan
 
@@ -49,8 +57,8 @@ The implementation is sequenced as follows:
 1. **Foundation and provider spike** — monorepo, mock mode, schema, B2/Genblaze
    interfaces, provenance, and the account-specific GMI capability probe.
 2. **Import and closet** — direct private upload, deterministic normalization and
-   source-hash dedupe, review queue, evidence records, cutout generation/QA
-   after provider configuration, and closet metadata editing.
+   source-hash dedupe, review queue, evidence records, deterministic source-cutout
+   QA, conservative duplicate review, and closet metadata editing.
 3. **Today** — Open-Meteo context, deterministic owned-only outfit constraints,
    three diverse recommendations, saved looks, and wear/ROI logging.
 4. **Selected preview and provenance** — consented reference photos, one

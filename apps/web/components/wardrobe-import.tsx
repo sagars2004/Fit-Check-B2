@@ -5,12 +5,17 @@ import { type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useS
 import {
   type Candidate,
   type CandidateReview,
+  type DuplicateReview,
   type Garment,
   type GarmentUpdate,
   type ImportJob,
   createImport,
+  decideDuplicateReview,
+  generateCutout,
   getCandidates,
+  getDuplicateReviews,
   getGarments,
+  reviewCutout,
   reviewCandidate,
   updateGarment,
   uploadPhotos,
@@ -24,20 +29,28 @@ export function WardrobeImport() {
   const [files, setFiles] = useState<File[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [garments, setGarments] = useState<Garment[]>([]);
+  const [duplicateReviews, setDuplicateReviews] = useState<DuplicateReview[]>([]);
   const [importJob, setImportJob] = useState<ImportJob | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [uploading, setUploading] = useState(false);
   const [activeCandidate, setActiveCandidate] = useState<string | null>(null);
   const [activeGarment, setActiveGarment] = useState<string | null>(null);
+  const [activeCutout, setActiveCutout] = useState<string | null>(null);
+  const [activeDuplicateReview, setActiveDuplicateReview] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
 
   const refresh = useCallback(async () => {
     try {
-      const [candidateItems, garmentItems] = await Promise.all([getCandidates(), getGarments()]);
+      const [candidateItems, garmentItems, duplicateItems] = await Promise.all([
+        getCandidates(),
+        getGarments(),
+        getDuplicateReviews(),
+      ]);
       setCandidates(candidateItems);
       setGarments(garmentItems);
+      setDuplicateReviews(duplicateItems);
       setLoadState("ready");
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "Unable to load the local wardrobe.");
@@ -109,6 +122,63 @@ export function WardrobeImport() {
     }
   }
 
+  async function handleGenerateCutout(garmentId: string) {
+    setActiveCutout(garmentId);
+    setError(null);
+    try {
+      const asset = await generateCutout(garmentId);
+      setNotice(
+        asset.qa_status === "awaiting_review"
+          ? "Source-linked cutout passed automated alpha QA. Review it before it becomes canonical."
+          : "The source image could not pass conservative alpha QA. It was held; use a clearer photo.",
+      );
+      await refresh();
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "The cutout QA run could not start.");
+    } finally {
+      setActiveCutout(null);
+    }
+  }
+
+  async function handleCutoutReview(garmentId: string, assetId: string, action: "approve" | "reject") {
+    setActiveCutout(assetId);
+    setError(null);
+    try {
+      await reviewCutout(garmentId, assetId, action);
+      setNotice(
+        action === "approve"
+          ? "Approved source-backed cutout. Any visual matches remain review-only suggestions."
+          : "Cutout rejected. This item is marked as needing a better source photo.",
+      );
+      await refresh();
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "That cutout decision could not be saved.");
+    } finally {
+      setActiveCutout(null);
+    }
+  }
+
+  async function handleDuplicateDecision(
+    reviewId: string,
+    action: "keep_separate" | "mark_likely_duplicate",
+  ) {
+    setActiveDuplicateReview(reviewId);
+    setError(null);
+    try {
+      await decideDuplicateReview(reviewId, action);
+      setNotice(
+        action === "keep_separate"
+          ? "Kept both garments. No inventory data was changed."
+          : "Marked as a likely duplicate for your review. No inventory data was changed.",
+      );
+      await refresh();
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "That duplicate decision could not be saved.");
+    } finally {
+      setActiveDuplicateReview(null);
+    }
+  }
+
   const visibleGarments = useMemo(() => {
     const term = filter.trim().toLowerCase();
     if (!term) return garments;
@@ -120,6 +190,8 @@ export function WardrobeImport() {
         garment.tags.some((tag) => tag.toLowerCase().includes(term)),
     );
   }, [filter, garments]);
+  const approvedGarmentCount = garments.filter((garment) => garment.status === "approved").length;
+  const pendingDuplicateReviews = duplicateReviews.filter((review) => review.status === "pending");
 
   return (
     <section className="wardrobe-workbench" aria-labelledby="wardrobe-heading">
@@ -129,7 +201,9 @@ export function WardrobeImport() {
           <h2 id="wardrobe-heading">Build a closet you can trust.</h2>
         </div>
         <span className="status-pill status-review">
-          {loadState === "loading" ? "Loading private closet" : `${garments.length} approved item${garments.length === 1 ? "" : "s"}`}
+          {loadState === "loading"
+            ? "Loading private closet"
+            : `${approvedGarmentCount} approved item${approvedGarmentCount === 1 ? "" : "s"}`}
         </span>
       </div>
 
@@ -197,7 +271,7 @@ export function WardrobeImport() {
       <div className="closet-heading">
         <div>
           <p className="eyebrow">Owned wardrobe</p>
-          <h3>Approved items, with the source still visible.</h3>
+          <h3>Owned items, with the source still visible.</h3>
         </div>
         <label className="search-field">
           <span className="sr-only">Filter wardrobe</span>
@@ -216,12 +290,21 @@ export function WardrobeImport() {
         {visibleGarments.map((garment) => (
           <GarmentCard
             garment={garment}
+            isCutoutSaving={activeCutout === garment.id || garment.cutouts.some((asset) => asset.id === activeCutout)}
             isSaving={activeGarment === garment.id}
             key={garment.id}
+            onGenerateCutout={handleGenerateCutout}
+            onReviewCutout={handleCutoutReview}
             onUpdate={handleGarmentUpdate}
           />
         ))}
       </div>
+
+      <DuplicateReviewQueue
+        isSaving={activeDuplicateReview}
+        onDecide={handleDuplicateDecision}
+        reviews={pendingDuplicateReviews}
+      />
     </section>
   );
 }
@@ -331,20 +414,35 @@ function CandidateCard({
 function GarmentCard({
   garment,
   isSaving,
+  isCutoutSaving,
+  onGenerateCutout,
+  onReviewCutout,
   onUpdate,
 }: {
   garment: Garment;
   isSaving: boolean;
+  isCutoutSaving: boolean;
+  onGenerateCutout: (garmentId: string) => Promise<void>;
+  onReviewCutout: (garmentId: string, assetId: string, action: "approve" | "reject") => Promise<void>;
   onUpdate: (garmentId: string, update: GarmentUpdate) => Promise<void>;
 }) {
   const [name, setName] = useState(garment.name);
   const [category, setCategory] = useState(garment.category);
   const [tags, setTags] = useState(garment.tags.join(", "));
   const [price, setPrice] = useState(garment.price?.toString() ?? "");
+  const latestCutout = garment.cutouts[0] ?? null;
+  const hasApprovedCutout = garment.cutouts.some((asset) => asset.qa_status === "approved");
 
   return (
     <article className="garment-card">
-      <SourceImage alt={`Approved source crop for ${garment.name}`} src={garment.source_crop_url} />
+      {latestCutout?.asset_url && latestCutout.qa_status !== "failed" ? (
+        <CutoutImage
+          alt={`Source-linked cutout candidate for ${garment.name}`}
+          src={latestCutout.asset_url}
+        />
+      ) : (
+        <SourceImage alt={`Approved source crop for ${garment.name}`} src={garment.source_crop_url} />
+      )}
       <div className="card-body">
         <div className="card-meta">
           <span className="evidence-badge">{evidenceLabel(garment.evidence_status)}</span>
@@ -359,6 +457,14 @@ function GarmentCard({
               ? "AI-reconstructed asset — human review is still required."
               : "This item needs a clearer photo before it can be trusted as inventory."}
         </p>
+        <CutoutReviewPanel
+          garment={garment}
+          hasApprovedCutout={hasApprovedCutout}
+          isSaving={isCutoutSaving}
+          latestCutout={latestCutout}
+          onGenerate={onGenerateCutout}
+          onReview={onReviewCutout}
+        />
         <details className="metadata-editor">
           <summary>Edit closet metadata</summary>
           <div className="review-fields">
@@ -391,6 +497,152 @@ function GarmentCard({
   );
 }
 
+function CutoutReviewPanel({
+  garment,
+  hasApprovedCutout,
+  isSaving,
+  latestCutout,
+  onGenerate,
+  onReview,
+}: {
+  garment: Garment;
+  hasApprovedCutout: boolean;
+  isSaving: boolean;
+  latestCutout: Garment["cutouts"][number] | null;
+  onGenerate: (garmentId: string) => Promise<void>;
+  onReview: (garmentId: string, assetId: string, action: "approve" | "reject") => Promise<void>;
+}) {
+  if (latestCutout?.qa_status === "awaiting_review") {
+    return (
+      <section className="cutout-review" aria-label={`Review cutout for ${garment.name}`}>
+        <strong>Cutout QA passed — human review required</strong>
+        <p>Transparent-background candidate derived from the preserved source crop. Approving it does not alter the source.</p>
+        {latestCutout.qa_warnings.length > 0 ? <p className="cutout-warning">{latestCutout.qa_warnings.join(" ")}</p> : null}
+        <div className="review-actions">
+          <button
+            className="approve-button"
+            disabled={isSaving}
+            onClick={() => void onReview(garment.id, latestCutout.id, "approve")}
+            type="button"
+          >
+            Approve cutout
+          </button>
+          <button
+            className="quiet-danger"
+            disabled={isSaving}
+            onClick={() => void onReview(garment.id, latestCutout.id, "reject")}
+            type="button"
+          >
+            Reject cutout
+          </button>
+        </div>
+      </section>
+    );
+  }
+
+  if (hasApprovedCutout) {
+    return (
+      <section className="cutout-review cutout-approved" aria-label={`Approved cutout for ${garment.name}`}>
+        <strong>Approved source-backed cutout</strong>
+        <p>Alpha QA passed and you approved this derivative. The original crop remains the primary evidence.</p>
+      </section>
+    );
+  }
+
+  const failed = latestCutout?.qa_status === "failed" || latestCutout?.qa_status === "rejected";
+  return (
+    <section className={failed ? "cutout-review cutout-held" : "cutout-review"} aria-label={`Cutout QA for ${garment.name}`}>
+      <strong>{failed ? "Needs a better photo" : "No cutout has been approved"}</strong>
+      <p>
+        {failed
+          ? "The source failed conservative alpha QA, so Fit Check did not call it a cutout. Use an isolated or clean-background photo."
+          : "Run deterministic chroma and alpha QA on this approved source crop. It never uses a generative provider in mock mode."}
+      </p>
+      {latestCutout?.qa_warnings.length ? <p className="cutout-warning">{latestCutout.qa_warnings.join(" ")}</p> : null}
+      <div className="review-actions">
+        <button
+          disabled={isSaving}
+          onClick={() => void onGenerate(garment.id)}
+          type="button"
+        >
+          {isSaving ? "Running alpha QA…" : failed ? "Retry with source crop" : "Run alpha QA"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function DuplicateReviewQueue({
+  isSaving,
+  onDecide,
+  reviews,
+}: {
+  isSaving: string | null;
+  onDecide: (reviewId: string, action: "keep_separate" | "mark_likely_duplicate") => Promise<void>;
+  reviews: DuplicateReview[];
+}) {
+  return (
+    <section className="duplicate-queue" aria-labelledby="duplicate-review-heading">
+      <div className="closet-heading">
+        <div>
+          <p className="eyebrow">Conservative duplicate review</p>
+          <h3 id="duplicate-review-heading">Similar does not mean the same.</h3>
+        </div>
+        <span className="duplicate-count">{reviews.length} review-only match{reviews.length === 1 ? "" : "es"}</span>
+      </div>
+      <p className="workbench-copy">
+        Local 16×16 luminance signatures only flag closely matching, approved cutouts in the same category. Fit Check never merges, archives, or deletes either item automatically.
+      </p>
+      {reviews.length === 0 ? (
+        <p className="empty-state">No close visual matches need your attention.</p>
+      ) : (
+        <div className="duplicate-grid">
+          {reviews.map((review) => (
+            <article className="duplicate-card" key={review.id}>
+              <div className="duplicate-meta">
+                <span className="review-badge">Human review required</span>
+                <span>{Math.round(review.score * 100)}% visual similarity</span>
+              </div>
+              <div className="duplicate-pair">
+                <DuplicateGarmentPreview garment={review.garment_a} />
+                <DuplicateGarmentPreview garment={review.garment_b} />
+              </div>
+              <p className="source-disclosure">Review only: both garments stay in your closet, whatever you choose.</p>
+              <div className="review-actions">
+                <button
+                  className="approve-button"
+                  disabled={isSaving === review.id}
+                  onClick={() => void onDecide(review.id, "keep_separate")}
+                  type="button"
+                >
+                  Keep both
+                </button>
+                <button
+                  disabled={isSaving === review.id}
+                  onClick={() => void onDecide(review.id, "mark_likely_duplicate")}
+                  type="button"
+                >
+                  Mark likely duplicate
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function DuplicateGarmentPreview({ garment }: { garment: DuplicateReview["garment_a"] }) {
+  return (
+    <div className="duplicate-garment-preview">
+      <CutoutImage alt={`Cutout for ${garment.name}`} src={garment.cutout_url} compact />
+      <strong>{garment.name}</strong>
+      <span>{garment.category} · {garment.colors.join(", ") || "color under review"}</span>
+    </div>
+  );
+}
+
 function SourceImage({ alt, src }: { alt: string; src: string | null }) {
   return (
     <div className="source-image">
@@ -399,6 +651,18 @@ function SourceImage({ alt, src }: { alt: string; src: string | null }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img alt={alt} src={src} />
       ) : <span>Source crop unavailable</span>}
+    </div>
+  );
+}
+
+function CutoutImage({ alt, compact = false, src }: { alt: string; compact?: boolean; src: string | null }) {
+  return (
+    <div className={compact ? "cutout-image cutout-image-compact" : "cutout-image"}>
+      {src ? (
+        // This private signed URL is a source-linked derivative; no public image optimization.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img alt={alt} src={src} />
+      ) : <span>Cutout unavailable</span>}
     </div>
   );
 }

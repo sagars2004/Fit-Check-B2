@@ -68,6 +68,10 @@ def create_app(runtime_settings: Settings | None = None) -> FastAPI:
             "UPLOAD_NOT_READY": 409,
             "CANDIDATE_NOT_APPROVABLE": 409,
             "LOCAL_UPLOAD_ENDPOINT_DISABLED": 404,
+            "GARMENT_NOT_CUTOUT_ELIGIBLE": 409,
+            "CUTOUT_NOT_FOUND": 404,
+            "CUTOUT_NOT_APPROVABLE": 409,
+            "DUPLICATE_REVIEW_NOT_FOUND": 404,
         }.get(exc.code, 422)
         return JSONResponse(status_code=status_code, content=exc.as_dict())
 

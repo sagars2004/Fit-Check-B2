@@ -104,6 +104,45 @@ export type Garment = {
   source_crop_key: string | null;
   source_crop_url: string | null;
   canonical_asset_id: string | null;
+  cutouts: GarmentAsset[];
+  created_at: string;
+};
+
+export type GarmentAsset = {
+  id: string;
+  kind: string;
+  object_key: string;
+  asset_url: string | null;
+  sha256: string;
+  version: number;
+  qa_status: "awaiting_review" | "approved" | "rejected" | "failed" | string;
+  qa_warnings: string[];
+  evidence_status: "verified_source_backed" | "ai_reconstructed" | "needs_better_photo" | string;
+  run_id: string | null;
+  parent_run_id: string | null;
+  provider: string;
+  model: string;
+  approved_at: string | null;
+  created_at: string;
+};
+
+export type DuplicateGarmentReference = {
+  id: string;
+  name: string;
+  category: string;
+  colors: string[];
+  source_crop_url: string | null;
+  cutout_url: string | null;
+};
+
+export type DuplicateReview = {
+  id: string;
+  score: number;
+  evidence: Record<string, unknown>;
+  status: "pending" | "not_duplicate" | "likely_duplicate" | string;
+  reviewer_notes: string | null;
+  garment_a: DuplicateGarmentReference;
+  garment_b: DuplicateGarmentReference;
   created_at: string;
 };
 
@@ -219,6 +258,37 @@ export async function updateGarment(id: string, update: GarmentUpdate): Promise<
   return requestJson<Garment>(`/v1/garments/${id}`, {
     method: "PATCH",
     body: JSON.stringify(update),
+  });
+}
+
+export async function generateCutout(id: string): Promise<GarmentAsset> {
+  return requestJson<GarmentAsset>(`/v1/garments/${id}/generate-cutout`, {
+    method: "POST",
+  });
+}
+
+export async function reviewCutout(
+  garmentId: string,
+  assetId: string,
+  action: "approve" | "reject",
+): Promise<GarmentAsset> {
+  return requestJson<GarmentAsset>(`/v1/garments/${garmentId}/cutouts/${assetId}/review`, {
+    method: "PATCH",
+    body: JSON.stringify({ action }),
+  });
+}
+
+export async function getDuplicateReviews(): Promise<DuplicateReview[]> {
+  return requestJson<DuplicateReview[]>("/v1/duplicate-reviews");
+}
+
+export async function decideDuplicateReview(
+  reviewId: string,
+  action: "keep_separate" | "mark_likely_duplicate",
+): Promise<DuplicateReview> {
+  return requestJson<DuplicateReview>(`/v1/duplicate-reviews/${reviewId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ action }),
   });
 }
 

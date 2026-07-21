@@ -107,6 +107,54 @@ class CandidateResponse(BaseModel):
     created_at: datetime
 
 
+class GarmentAssetResponse(BaseModel):
+    id: str
+    kind: str
+    object_key: str
+    asset_url: str | None = None
+    sha256: str
+    version: int
+    qa_status: str
+    qa_warnings: list[str]
+    evidence_status: str
+    run_id: str | None
+    parent_run_id: str | None
+    provider: str
+    model: str
+    approved_at: datetime | None
+    created_at: datetime
+
+
+class CutoutReviewRequest(BaseModel):
+    action: Literal["approve", "reject"]
+    notes: str | None = Field(default=None, max_length=2_000)
+
+
+class DuplicateGarmentReference(BaseModel):
+    id: str
+    name: str
+    category: str
+    colors: list[str]
+    source_crop_url: str | None = None
+    cutout_url: str | None = None
+
+
+class DuplicateReviewResponse(BaseModel):
+    id: str
+    score: float
+    evidence: dict[str, Any]
+    status: str
+    reviewer_notes: str | None
+    garment_a: DuplicateGarmentReference
+    garment_b: DuplicateGarmentReference
+    created_at: datetime
+
+
+class DuplicateReviewDecisionRequest(BaseModel):
+    action: Literal["keep_separate", "mark_likely_duplicate"]
+    notes: str | None = Field(default=None, max_length=2_000)
+
+
 class GarmentUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=180)
     category: str | None = Field(default=None, min_length=1, max_length=80)
@@ -135,4 +183,5 @@ class GarmentResponse(BaseModel):
     source_crop_key: str | None = None
     source_crop_url: str | None = None
     canonical_asset_id: str | None = None
+    cutouts: list[GarmentAssetResponse] = Field(default_factory=list)
     created_at: datetime

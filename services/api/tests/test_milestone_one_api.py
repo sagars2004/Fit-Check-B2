@@ -3,12 +3,13 @@ from __future__ import annotations
 from io import BytesIO
 
 from httpx import ASGITransport, AsyncClient
-from PIL import Image
+from PIL import Image, ImageDraw, PngImagePlugin
 from sqlalchemy import func, select
 
 from app.core.config import ProviderMode, Settings, StorageMode
 from app.db.models import GarmentEvidence, Upload
 from app.main import create_app
+from app.services.image_processing import validate_cutout_png
 
 
 def _photo_bytes(color: tuple[int, int, int] = (31, 63, 112)) -> bytes:
@@ -16,6 +17,48 @@ def _photo_bytes(color: tuple[int, int, int] = (31, 63, 112)) -> bytes:
     output = BytesIO()
     image.save(output, format="JPEG")
     return output.getvalue()
+
+
+def _green_screen_garment_bytes(variant: str) -> bytes:
+    """Different raw PNG bytes that normalize to the same source crop."""
+
+    image = Image.new("RGB", (160, 220), (18, 188, 28))
+    draw = ImageDraw.Draw(image)
+    draw.polygon(
+        [
+            (58, 24),
+            (102, 24),
+            (124, 58),
+            (110, 76),
+            (104, 62),
+            (104, 184),
+            (56, 184),
+            (56, 62),
+            (50, 76),
+            (36, 58),
+        ],
+        fill=(35, 89, 149),
+    )
+    metadata = PngImagePlugin.PngInfo()
+    metadata.add_text("fit-check-test-variant", variant)
+    output = BytesIO()
+    image.save(output, format="PNG", pnginfo=metadata)
+    return output.getvalue()
+
+
+async def _create_approved_garment(
+    client: AsyncClient, filename: str, content: bytes, content_type: str
+) -> str:
+    target = await client.post(
+        "/v1/uploads/presign",
+        json={"filename": filename, "content_type": content_type, "size_bytes": len(content)},
+    )
+    uploaded = await client.put(target.json()["upload_url"], content=content)
+    created = await client.post("/v1/imports", json={"upload_ids": [uploaded.json()["upload_id"]]})
+    candidate_id = created.json()["candidate_ids"][0]
+    approved = await client.patch(f"/v1/candidates/{candidate_id}", json={"action": "approve"})
+    assert approved.status_code == 200
+    return str(approved.json()["garment_id"])
 
 
 async def test_local_upload_import_review_and_closet_flow(tmp_path) -> None:
@@ -217,3 +260,137 @@ async def test_hold_and_reject_keep_unapproved_candidates_out_of_the_closet(tmp_
             closet = await client.get("/v1/garments")
             assert closet.status_code == 200
             assert closet.json() == []
+
+
+async def test_source_derived_cutout_requires_qa_then_human_approval(tmp_path) -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="test",
+        provider_mode=ProviderMode.MOCK,
+        storage_mode=StorageMode.LOCAL,
+        database_url=f"sqlite+aiosqlite:///{tmp_path / 'runtime' / 'api.db'}",
+        local_media_root=tmp_path / "media",
+        public_media_base_url="http://testserver/v1/media",
+    )
+    app = create_app(settings)
+
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            garment_id = await _create_approved_garment(
+                client, "green-screen-top.png", _green_screen_garment_bytes("first"), "image/png"
+            )
+            generated = await client.post(f"/v1/garments/{garment_id}/generate-cutout")
+            assert generated.status_code == 200
+            cutout = generated.json()
+            assert cutout["qa_status"] == "awaiting_review"
+            assert cutout["evidence_status"] == "verified_source_backed"
+            rendered = await client.get(cutout["asset_url"])
+            assert rendered.status_code == 200
+            assert validate_cutout_png(rendered.content).passed
+
+            before_review = await client.get("/v1/garments")
+            assert before_review.json()[0]["canonical_asset_id"] is None
+            assert before_review.json()[0]["cutouts"][0]["qa_status"] == "awaiting_review"
+
+            approved = await client.patch(
+                f"/v1/garments/{garment_id}/cutouts/{cutout['id']}/review",
+                json={"action": "approve"},
+            )
+            assert approved.status_code == 200
+            assert approved.json()["qa_status"] == "approved"
+
+            garment = (await client.get("/v1/garments")).json()[0]
+            assert garment["canonical_asset_id"] == cutout["id"]
+            provenance = await client.get(f"/v1/provenance/garment_asset/{cutout['id']}")
+            assert provenance.status_code == 200
+            assert provenance.json()["manifest"]["qa"]["status"] == "awaiting_review"
+            assert provenance.json()["manifest"]["source_object_keys"] == [
+                garment["source_crop_key"]
+            ]
+
+
+async def test_opaque_source_is_held_instead_of_claimed_as_a_cutout(tmp_path) -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="test",
+        provider_mode=ProviderMode.MOCK,
+        storage_mode=StorageMode.LOCAL,
+        database_url=f"sqlite+aiosqlite:///{tmp_path / 'runtime' / 'api.db'}",
+        local_media_root=tmp_path / "media",
+        public_media_base_url="http://testserver/v1/media",
+    )
+    app = create_app(settings)
+
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            garment_id = await _create_approved_garment(
+                client, "ordinary-photo.jpg", _photo_bytes(), "image/jpeg"
+            )
+            generated = await client.post(f"/v1/garments/{garment_id}/generate-cutout")
+            assert generated.status_code == 200
+            assert generated.json()["qa_status"] == "failed"
+            assert "opaque_corners" in generated.json()["qa_warnings"]
+
+            held = (await client.get("/v1/garments")).json()[0]
+            assert held["status"] == "needs_better_photo"
+            assert held["evidence_status"] == "needs_better_photo"
+            assert held["canonical_asset_id"] is None
+
+
+async def test_similar_cutouts_create_review_only_duplicate_suggestion(tmp_path) -> None:
+    settings = Settings(
+        _env_file=None,
+        app_env="test",
+        provider_mode=ProviderMode.MOCK,
+        storage_mode=StorageMode.LOCAL,
+        database_url=f"sqlite+aiosqlite:///{tmp_path / 'runtime' / 'api.db'}",
+        local_media_root=tmp_path / "media",
+        public_media_base_url="http://testserver/v1/media",
+    )
+    app = create_app(settings)
+
+    async with app.router.lifespan_context(app):
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+            first_id = await _create_approved_garment(
+                client, "first.png", _green_screen_garment_bytes("first"), "image/png"
+            )
+            first_asset = (await client.post(f"/v1/garments/{first_id}/generate-cutout")).json()
+            first_review = await client.patch(
+                f"/v1/garments/{first_id}/cutouts/{first_asset['id']}/review",
+                json={"action": "approve"},
+            )
+            assert first_review.status_code == 200
+
+            second_id = await _create_approved_garment(
+                client, "second.png", _green_screen_garment_bytes("second"), "image/png"
+            )
+            second_asset = (await client.post(f"/v1/garments/{second_id}/generate-cutout")).json()
+            second_review = await client.patch(
+                f"/v1/garments/{second_id}/cutouts/{second_asset['id']}/review",
+                json={"action": "approve"},
+            )
+            assert second_review.status_code == 200
+
+            reviews = await client.get("/v1/duplicate-reviews")
+            assert reviews.status_code == 200
+            assert len(reviews.json()) == 1
+            review = reviews.json()[0]
+            assert review["status"] == "pending"
+            assert review["score"] >= 0.96
+            assert review["evidence"]["review_only"] is True
+            assert {review["garment_a"]["id"], review["garment_b"]["id"]} == {
+                first_id,
+                second_id,
+            }
+
+            decision = await client.patch(
+                f"/v1/duplicate-reviews/{review['id']}",
+                json={"action": "keep_separate", "notes": "Different purchase dates."},
+            )
+            assert decision.status_code == 200
+            assert decision.json()["status"] == "not_duplicate"
+            assert decision.json()["reviewer_notes"] == "Different purchase dates."
+            assert len((await client.get("/v1/garments")).json()) == 2

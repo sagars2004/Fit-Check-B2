@@ -13,7 +13,11 @@ from app.db.session import get_session
 from app.domain.schemas import (
     CandidateResponse,
     CandidateReviewRequest,
+    CutoutReviewRequest,
     DemoAssetResponse,
+    DuplicateReviewDecisionRequest,
+    DuplicateReviewResponse,
+    GarmentAssetResponse,
     GarmentResponse,
     GarmentUpdateRequest,
     ImportCreateRequest,
@@ -120,6 +124,50 @@ async def list_garments(
 ) -> list[GarmentResponse]:
     return await _milestone_one_workflow(request).list_garments(
         session, category=category, color=color, status=status, query=q
+    )
+
+
+@router.post("/garments/{garment_id}/generate-cutout", response_model=GarmentAssetResponse)
+async def generate_cutout(
+    garment_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> GarmentAssetResponse:
+    return await _milestone_one_workflow(request).generate_deterministic_cutout(session, garment_id)
+
+
+@router.patch(
+    "/garments/{garment_id}/cutouts/{asset_id}/review", response_model=GarmentAssetResponse
+)
+async def review_cutout(
+    garment_id: str,
+    asset_id: str,
+    payload: CutoutReviewRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> GarmentAssetResponse:
+    return await _milestone_one_workflow(request).review_cutout(
+        session, garment_id, asset_id, payload
+    )
+
+
+@router.get("/duplicate-reviews", response_model=list[DuplicateReviewResponse])
+async def list_duplicate_reviews(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> list[DuplicateReviewResponse]:
+    return await _milestone_one_workflow(request).list_duplicate_reviews(session)
+
+
+@router.patch("/duplicate-reviews/{review_id}", response_model=DuplicateReviewResponse)
+async def decide_duplicate_review(
+    review_id: str,
+    payload: DuplicateReviewDecisionRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> DuplicateReviewResponse:
+    return await _milestone_one_workflow(request).decide_duplicate_review(
+        session, review_id, payload
     )
 
 

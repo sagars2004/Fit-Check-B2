@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,10 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, StorageMode
 from app.core.errors import FitCheckError
 from app.db.models import (
+    DuplicateReview,
     Garment,
+    GarmentAsset,
     GarmentCandidate,
     GarmentEvidence,
     ImportJob,
+    ProvenanceLink,
     Upload,
     User,
     new_id,
@@ -23,6 +26,11 @@ from app.domain.enums import AssetEvidenceStatus, GarmentStatus, ImportStatus
 from app.domain.schemas import (
     CandidateResponse,
     CandidateReviewRequest,
+    CutoutReviewRequest,
+    DuplicateGarmentReference,
+    DuplicateReviewDecisionRequest,
+    DuplicateReviewResponse,
+    GarmentAssetResponse,
     GarmentResponse,
     GarmentUpdateRequest,
     ImportJobResponse,
@@ -32,12 +40,17 @@ from app.domain.schemas import (
 )
 from app.services.image_processing import (
     approximate_color_name,
+    chroma_to_transparent,
     crop_normalized_image,
     inspect_upload_image,
     normalize_image,
+    perceptual_bit_signature,
     perceptual_input_fingerprint,
+    perceptual_similarity,
+    validate_cutout_png,
 )
 from app.services.object_keys import ObjectKeys
+from app.services.provenance import MediaProvenanceManifest, persist_manifest
 from app.services.storage import ObjectStorage, sha256_bytes
 
 _ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
@@ -52,9 +65,10 @@ class MilestoneOneWorkflow:
     """Private, deterministic import and review workflow for the local MVP.
 
     The workflow deliberately produces *source crops*, not invented cutouts.
-    A crop remains evidence for a human to inspect; transparent cutout generation
-    stays gated behind an approved item and a configured, capability-tested
-    provider path.
+    A crop remains evidence for a human to inspect. In mock mode, an approved
+    crop may go through deterministic chroma removal and alpha QA; only a
+    passing derivative that a human approves becomes a source-backed cutout.
+    Live provider generation stays gated behind the capability-tested path.
     """
 
     def __init__(self, settings: Settings, storage: ObjectStorage) -> None:
@@ -332,6 +346,238 @@ class MilestoneOneWorkflow:
         await session.commit()
         return await self._candidate_response(candidate)
 
+    async def generate_deterministic_cutout(
+        self, session: AsyncSession, garment_id: str
+    ) -> GarmentAssetResponse:
+        """Create a review-only source-derived cutout without generative inference.
+
+        The green-screen removal intentionally fails closed: ordinary outfit
+        photos remain source evidence, but do not become a purported catalog
+        cutout unless their alpha output passes technical QA.
+        """
+
+        user = await self._ensure_demo_user(session)
+        garment = await self._load_owned_garment(session, user.id, garment_id)
+        if garment.status not in {
+            GarmentStatus.APPROVED.value,
+            GarmentStatus.NEEDS_BETTER_PHOTO.value,
+        }:
+            raise FitCheckError(
+                "GARMENT_NOT_CUTOUT_ELIGIBLE",
+                "Approve a source-backed garment before creating its cutout.",
+                entity_id=garment.id,
+            )
+        evidence = await self._primary_evidence(session, garment.id)
+        if evidence is None:
+            raise FitCheckError(
+                "SOURCE_EVIDENCE_MISSING",
+                "This garment has no source crop for a traceable cutout.",
+                entity_id=garment.id,
+            )
+        previous_asset = await session.scalar(
+            select(GarmentAsset)
+            .where(GarmentAsset.garment_id == garment.id, GarmentAsset.kind == "cutout")
+            .order_by(GarmentAsset.version.desc())
+        )
+        version = (previous_asset.version if previous_asset is not None else 0) + 1
+        parent_run_id = previous_asset.run_id if previous_asset is not None else None
+        source = await self.storage.get_bytes(evidence.crop_key)
+        output = chroma_to_transparent(source)
+        qa = validate_cutout_png(output)
+        asset_id = new_id()
+        run_id = f"local-cutout-{new_id()}"
+        object_key = self.keys.garment_cutout(user.id, garment.id, version)
+        stored = await self.storage.put_bytes(
+            object_key,
+            output,
+            content_type="image/png",
+            metadata={
+                "asset-id": asset_id,
+                "run-id": run_id,
+                "source-evidence-id": evidence.id,
+                "qa-status": "awaiting_review" if qa.passed else "failed",
+            },
+        )
+        persisted = await self.storage.head(object_key)
+        if persisted.sha256 != stored.sha256:
+            raise FitCheckError(
+                "STORAGE_HASH_MISMATCH",
+                "Saving securely failed validation.",
+                retryable=True,
+                entity_id=garment.id,
+                correlation_id=run_id,
+            )
+
+        asset_evidence_status = (
+            AssetEvidenceStatus.VERIFIED_SOURCE_BACKED.value
+            if qa.passed
+            else AssetEvidenceStatus.NEEDS_BETTER_PHOTO.value
+        )
+        qa_status = "awaiting_review" if qa.passed else "failed"
+        manifest = MediaProvenanceManifest(
+            run_id=run_id,
+            parent_run_id=parent_run_id,
+            pipeline_slug="fit-check-deterministic-cutout",
+            tenant_id=user.id,
+            status="awaiting_review" if qa.passed else "failed",
+            provider="local",
+            model="deterministic-chroma-key/v1",
+            prompt_template_version="m1b.deterministic-chroma/v1",
+            prompt_redacted="[no generative prompt; source-derived chroma removal]",
+            generation_parameters={"green_bias": 32, "version": version},
+            source_asset_ids=[evidence.id],
+            source_object_keys=[evidence.crop_key],
+            output={
+                "asset_id": asset_id,
+                "object_key": object_key,
+                "sha256": stored.sha256,
+                "content_type": "image/png",
+                "bytes": stored.size,
+            },
+            transformations=[
+                {"name": "source_crop_reference", "sha256": evidence.sha256},
+                {"name": "deterministic_chroma_removal", "green_bias": 32},
+                {
+                    "name": "transparent_alpha_qa",
+                    "passed": qa.passed,
+                    "warnings": list(qa.warnings),
+                    "transparent_corners": qa.transparent_corner_count,
+                    "alpha_bbox": list(qa.alpha_bbox) if qa.alpha_bbox else None,
+                },
+            ],
+            qa={
+                "status": qa_status,
+                "warnings": list(qa.warnings),
+                "review_required": qa.passed,
+                "evidence_status": asset_evidence_status,
+            },
+        )
+        manifest_key, manifest_hash = await persist_manifest(self.storage, self.keys, manifest)
+        asset = GarmentAsset(
+            id=asset_id,
+            garment_id=garment.id,
+            kind="cutout",
+            object_key=object_key,
+            sha256=stored.sha256,
+            version=version,
+            qa_status=qa_status,
+            qa_warnings=list(qa.warnings),
+            evidence_status=asset_evidence_status,
+            run_id=run_id,
+            parent_run_id=parent_run_id,
+            provider="local",
+            model="deterministic-chroma-key/v1",
+        )
+        link = ProvenanceLink(
+            entity_type="garment_asset",
+            entity_id=asset.id,
+            manifest_key=manifest_key,
+            manifest_hash=manifest_hash,
+            run_id=run_id,
+            parent_run_id=parent_run_id,
+            privacy_scope="private",
+            redacted_manifest=manifest.owner_view(),
+        )
+        if not qa.passed and garment.canonical_asset_id is None:
+            garment.status = GarmentStatus.NEEDS_BETTER_PHOTO.value
+            garment.evidence_status = AssetEvidenceStatus.NEEDS_BETTER_PHOTO.value
+        session.add_all([asset, link])
+        await session.commit()
+        return await self._asset_response(asset)
+
+    async def review_cutout(
+        self,
+        session: AsyncSession,
+        garment_id: str,
+        asset_id: str,
+        payload: CutoutReviewRequest,
+    ) -> GarmentAssetResponse:
+        user = await self._ensure_demo_user(session)
+        garment = await self._load_owned_garment(session, user.id, garment_id)
+        asset = await session.scalar(
+            select(GarmentAsset).where(
+                GarmentAsset.id == asset_id,
+                GarmentAsset.garment_id == garment.id,
+                GarmentAsset.kind == "cutout",
+            )
+        )
+        if asset is None:
+            raise FitCheckError(
+                "CUTOUT_NOT_FOUND", "That cutout is unavailable.", entity_id=asset_id
+            )
+        if payload.action == "approve":
+            if asset.qa_status != "awaiting_review":
+                raise FitCheckError(
+                    "CUTOUT_NOT_APPROVABLE",
+                    "Only a technically valid cutout can be approved.",
+                    entity_id=asset.id,
+                )
+            asset.qa_status = "approved"
+            asset.approved_at = datetime.now(UTC)
+            garment.canonical_asset_id = asset.id
+            garment.status = GarmentStatus.APPROVED.value
+            garment.evidence_status = AssetEvidenceStatus.VERIFIED_SOURCE_BACKED.value
+            await self._create_duplicate_suggestions(session, user.id, garment, asset)
+        else:
+            asset.qa_status = "rejected"
+            asset.qa_warnings = list(
+                dict.fromkeys([*asset.qa_warnings, "rejected_by_human_review"])
+            )
+            if garment.canonical_asset_id in {None, asset.id}:
+                garment.canonical_asset_id = None
+                garment.status = GarmentStatus.NEEDS_BETTER_PHOTO.value
+                garment.evidence_status = AssetEvidenceStatus.NEEDS_BETTER_PHOTO.value
+        await session.commit()
+        return await self._asset_response(asset)
+
+    async def list_duplicate_reviews(self, session: AsyncSession) -> list[DuplicateReviewResponse]:
+        user = await self._ensure_demo_user(session)
+        reviews = list(
+            (
+                await session.scalars(
+                    select(DuplicateReview).order_by(DuplicateReview.created_at.desc())
+                )
+            ).all()
+        )
+        responses: list[DuplicateReviewResponse] = []
+        for review in reviews:
+            garment_a = await self._owned_garment_or_none(session, user.id, review.garment_a_id)
+            garment_b = await self._owned_garment_or_none(session, user.id, review.garment_b_id)
+            if garment_a is not None and garment_b is not None:
+                responses.append(
+                    await self._duplicate_response(session, review, garment_a, garment_b)
+                )
+        return responses
+
+    async def decide_duplicate_review(
+        self,
+        session: AsyncSession,
+        review_id: str,
+        payload: DuplicateReviewDecisionRequest,
+    ) -> DuplicateReviewResponse:
+        user = await self._ensure_demo_user(session)
+        review = await session.scalar(
+            select(DuplicateReview).where(DuplicateReview.id == review_id)
+        )
+        if review is None:
+            raise FitCheckError(
+                "DUPLICATE_REVIEW_NOT_FOUND", "That duplicate review is unavailable."
+            )
+        garment_a = await self._owned_garment_or_none(session, user.id, review.garment_a_id)
+        garment_b = await self._owned_garment_or_none(session, user.id, review.garment_b_id)
+        if garment_a is None or garment_b is None:
+            raise FitCheckError(
+                "DUPLICATE_REVIEW_NOT_FOUND", "That duplicate review is unavailable."
+            )
+        review.status = "not_duplicate" if payload.action == "keep_separate" else "likely_duplicate"
+        review.reviewer_notes = payload.notes or (
+            "Human kept both garments."
+            if payload.action == "keep_separate"
+            else "Human marked likely duplicate."
+        )
+        await session.commit()
+        return await self._duplicate_response(session, review, garment_a, garment_b)
+
     async def list_garments(
         self,
         session: AsyncSession,
@@ -351,9 +597,14 @@ class MilestoneOneWorkflow:
             statement = statement.where(Garment.status == status)
         else:
             # The closet/recommendation-facing collection contains only items
-            # the user approved as inventory. M0's clearly labeled demo
-            # reconstruction never leaks into owned wardrobe decisions.
-            statement = statement.where(Garment.status == GarmentStatus.APPROVED.value)
+            # with human-approved identity. M0's clearly labeled demo
+            # reconstruction never leaks into owned wardrobe decisions; held
+            # items remain visible so the user can request a better photo.
+            statement = statement.where(
+                Garment.status.in_(
+                    [GarmentStatus.APPROVED.value, GarmentStatus.NEEDS_BETTER_PHOTO.value]
+                )
+            )
         garments = list((await session.scalars(statement)).all())
         lowered_query = query.lower().strip() if query else ""
         lowered_color = color.lower().strip() if color else ""
@@ -595,11 +846,136 @@ class MilestoneOneWorkflow:
             created_at=candidate.created_at,
         )
 
+    async def _asset_response(self, asset: GarmentAsset) -> GarmentAssetResponse:
+        return GarmentAssetResponse(
+            id=asset.id,
+            kind=asset.kind,
+            object_key=asset.object_key,
+            asset_url=await self.storage.signed_read_url(asset.object_key),
+            sha256=asset.sha256,
+            version=asset.version,
+            qa_status=asset.qa_status,
+            qa_warnings=list(asset.qa_warnings),
+            evidence_status=asset.evidence_status,
+            run_id=asset.run_id,
+            parent_run_id=asset.parent_run_id,
+            provider=asset.provider,
+            model=asset.model,
+            approved_at=asset.approved_at,
+            created_at=asset.created_at,
+        )
+
+    async def _create_duplicate_suggestions(
+        self,
+        session: AsyncSession,
+        user_id: str,
+        garment: Garment,
+        asset: GarmentAsset,
+    ) -> None:
+        """Rank close cutouts as review-only suggestions; never merge or delete."""
+
+        current_signature = perceptual_bit_signature(await self.storage.get_bytes(asset.object_key))
+        rows = (
+            await session.execute(
+                select(Garment, GarmentAsset)
+                .join(GarmentAsset, Garment.canonical_asset_id == GarmentAsset.id)
+                .where(
+                    Garment.user_id == user_id,
+                    Garment.id != garment.id,
+                    Garment.status == GarmentStatus.APPROVED.value,
+                    GarmentAsset.kind == "cutout",
+                    GarmentAsset.qa_status == "approved",
+                )
+            )
+        ).all()
+        for other_garment, other_asset in rows:
+            if other_garment.category != garment.category:
+                continue
+            similarity = perceptual_similarity(
+                current_signature,
+                perceptual_bit_signature(await self.storage.get_bytes(other_asset.object_key)),
+            )
+            if similarity < 0.96:
+                continue
+            garment_a_id, garment_b_id = sorted((garment.id, other_garment.id))
+            existing = await session.scalar(
+                select(DuplicateReview).where(
+                    DuplicateReview.garment_a_id == garment_a_id,
+                    DuplicateReview.garment_b_id == garment_b_id,
+                )
+            )
+            if existing is not None:
+                continue
+            session.add(
+                DuplicateReview(
+                    id=new_id(),
+                    garment_a_id=garment_a_id,
+                    garment_b_id=garment_b_id,
+                    score=round(similarity, 4),
+                    evidence={
+                        "method": "local_16x16_luma_signature/v1",
+                        "threshold": 0.96,
+                        "similarity": round(similarity, 4),
+                        "category_match": garment.category,
+                        "review_only": True,
+                        "note": "No merge, archive, or deletion occurs automatically.",
+                    },
+                    status="pending",
+                )
+            )
+
+    async def _duplicate_response(
+        self,
+        session: AsyncSession,
+        review: DuplicateReview,
+        garment_a: Garment,
+        garment_b: Garment,
+    ) -> DuplicateReviewResponse:
+        return DuplicateReviewResponse(
+            id=review.id,
+            score=float(review.score),
+            evidence=dict(review.evidence),
+            status=review.status,
+            reviewer_notes=review.reviewer_notes,
+            garment_a=await self._duplicate_garment_reference(session, garment_a),
+            garment_b=await self._duplicate_garment_reference(session, garment_b),
+            created_at=review.created_at,
+        )
+
+    async def _duplicate_garment_reference(
+        self, session: AsyncSession, garment: Garment
+    ) -> DuplicateGarmentReference:
+        evidence = await self._primary_evidence(session, garment.id)
+        asset = (
+            await session.scalar(
+                select(GarmentAsset).where(GarmentAsset.id == garment.canonical_asset_id)
+            )
+            if garment.canonical_asset_id
+            else None
+        )
+        return DuplicateGarmentReference(
+            id=garment.id,
+            name=garment.name,
+            category=garment.category,
+            colors=list(garment.colors),
+            source_crop_url=(
+                await self.storage.signed_read_url(evidence.crop_key)
+                if evidence is not None
+                else None
+            ),
+            cutout_url=(await self.storage.signed_read_url(asset.object_key) if asset else None),
+        )
+
     async def _garment_response(self, session: AsyncSession, garment: Garment) -> GarmentResponse:
-        evidence = await session.scalar(
-            select(GarmentEvidence)
-            .where(GarmentEvidence.garment_id == garment.id)
-            .order_by(GarmentEvidence.created_at.asc())
+        evidence = await self._primary_evidence(session, garment.id)
+        cutouts = list(
+            (
+                await session.scalars(
+                    select(GarmentAsset)
+                    .where(GarmentAsset.garment_id == garment.id, GarmentAsset.kind == "cutout")
+                    .order_by(GarmentAsset.version.desc())
+                )
+            ).all()
         )
         source_crop_key = evidence.crop_key if evidence else None
         source_crop_url = (
@@ -621,6 +997,7 @@ class MilestoneOneWorkflow:
             source_crop_key=source_crop_key,
             source_crop_url=source_crop_url,
             canonical_asset_id=garment.canonical_asset_id,
+            cutouts=[await self._asset_response(asset) for asset in cutouts],
             created_at=garment.created_at,
         )
 
@@ -666,6 +1043,38 @@ class MilestoneOneWorkflow:
                 entity_id=candidate_id,
             )
         return candidate, upload
+
+    async def _load_owned_garment(
+        self, session: AsyncSession, user_id: str, garment_id: str
+    ) -> Garment:
+        garment = await self._owned_garment_or_none(session, user_id, garment_id)
+        if garment is None:
+            raise FitCheckError(
+                "GARMENT_NOT_FOUND", "That wardrobe item is unavailable.", entity_id=garment_id
+            )
+        return garment
+
+    async def _owned_garment_or_none(
+        self, session: AsyncSession, user_id: str, garment_id: str
+    ) -> Garment | None:
+        return cast(
+            Garment | None,
+            await session.scalar(
+                select(Garment).where(Garment.id == garment_id, Garment.user_id == user_id)
+            ),
+        )
+
+    async def _primary_evidence(
+        self, session: AsyncSession, garment_id: str
+    ) -> GarmentEvidence | None:
+        return cast(
+            GarmentEvidence | None,
+            await session.scalar(
+                select(GarmentEvidence)
+                .where(GarmentEvidence.garment_id == garment_id)
+                .order_by(GarmentEvidence.created_at.asc())
+            ),
+        )
 
 
 def _extension_for_upload(filename: str, content_type: str) -> str:

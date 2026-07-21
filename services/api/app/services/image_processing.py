@@ -180,12 +180,26 @@ def validate_cutout_png(source: bytes) -> ImageQaResult:
 
 def perceptual_input_fingerprint(source: bytes) -> str:
     """A stable, cheap local fingerprint for coarse duplicate ranking."""
+
+    return hashlib.sha256(perceptual_bit_signature(source).encode("ascii")).hexdigest()
+
+
+def perceptual_bit_signature(source: bytes) -> str:
+    """Return a local luma signature suitable for review-only ranking."""
+
     with Image.open(BytesIO(source)) as image:
         grayscale = ImageOps.exif_transpose(image).convert("L").resize((16, 16))
         pixels = grayscale.tobytes()
         average = sum(pixels) / len(pixels)
-        bits = "".join("1" if pixel >= average else "0" for pixel in pixels)
-        return hashlib.sha256(bits.encode("ascii")).hexdigest()
+        return "".join("1" if pixel >= average else "0" for pixel in pixels)
+
+
+def perceptual_similarity(left: str, right: str) -> float:
+    """Fraction of matching signature bits; never a merge decision."""
+
+    if not left or len(left) != len(right):
+        return 0.0
+    return sum(a == b for a, b in zip(left, right, strict=True)) / len(left)
 
 
 def alpha_content_bbox(source: bytes) -> tuple[int, int, int, int] | None:
