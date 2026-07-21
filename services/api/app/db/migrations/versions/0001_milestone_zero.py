@@ -23,4 +23,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     bind = op.get_bind()
     Base.metadata.drop_all(bind=bind)
-

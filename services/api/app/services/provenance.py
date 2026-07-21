@@ -70,4 +70,3 @@ async def persist_manifest(
         metadata={"manifest-hash": finalized.manifest_hash or ""},
     )
     return stored.key, finalized.manifest_hash or ""
-

@@ -21,4 +21,3 @@ class FitCheckError(Exception):
             "recommended_action": self.recommended_action,
             "correlation_id": self.correlation_id,
         }
-

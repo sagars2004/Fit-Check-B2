@@ -1,2 +1,1 @@
 """Fit Check API package."""
-

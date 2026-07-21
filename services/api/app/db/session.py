@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from pathlib import Path
 
 from fastapi import Request
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.core.config import Settings
 from app.db.models import Base
@@ -11,6 +18,7 @@ from app.db.models import Base
 
 class Database:
     def __init__(self, settings: Settings) -> None:
+        _ensure_sqlite_parent_directory(settings.database_url)
         self.engine: AsyncEngine = create_async_engine(settings.database_url, pool_pre_ping=True)
         self.session_factory = async_sessionmaker(self.engine, expire_on_commit=False)
 
@@ -30,3 +38,10 @@ async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
     async with database.session() as session:
         yield session
 
+
+def _ensure_sqlite_parent_directory(database_url: str) -> None:
+    """Make the default local SQLite URL work from any API working directory."""
+    url = make_url(database_url)
+    if not url.drivername.startswith("sqlite") or not url.database or url.database == ":memory:":
+        return
+    Path(url.database).expanduser().parent.mkdir(parents=True, exist_ok=True)

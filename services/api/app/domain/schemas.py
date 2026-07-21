@@ -38,4 +38,3 @@ class ProvenanceResponse(BaseModel):
     entity_type: str
     entity_id: str
     manifest: dict[str, Any]
-

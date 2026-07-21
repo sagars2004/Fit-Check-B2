@@ -37,4 +37,3 @@ class OutfitStatus(StrEnum):
     PREVIEW_READY = "preview_ready"
     WORN = "worn"
     REJECTED = "rejected"
-

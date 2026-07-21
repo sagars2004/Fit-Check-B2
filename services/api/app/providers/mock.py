@@ -36,4 +36,3 @@ class MockMediaOrchestrator:
             content_type="image/png",
             provider_manifest={"mode": "offline", "deterministic_seed": seed.hex()[:16]},
         )
-

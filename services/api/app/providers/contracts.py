@@ -33,4 +33,3 @@ class GeneratedMedia:
 
 class MediaOrchestrator(Protocol):
     async def generate_image(self, request: ImageGenerationRequest) -> GeneratedMedia: ...
-

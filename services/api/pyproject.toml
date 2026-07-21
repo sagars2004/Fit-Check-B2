@@ -16,7 +16,7 @@ dependencies = [
   "httpx>=0.28,<1",
   "pillow>=11,<12",
   "pydantic-settings>=2.7,<3",
-  "sqlalchemy>=2.0.36,<3",
+  "sqlalchemy[asyncio]>=2.0.36,<3",
   "tenacity>=9,<10",
   "uvicorn[standard]>=0.34,<1",
 ]
@@ -46,6 +46,9 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+# FastAPI's standard dependency-injection syntax intentionally uses Depends(...)
+# in endpoint defaults.
+ignore = ["B008"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -54,6 +57,16 @@ plugins = []
 exclude = ["app/db/migrations"]
 
 [[tool.mypy.overrides]]
-module = ["boto3", "botocore.*", "PIL.*", "genblaze_*"]
+module = [
+  "boto3",
+  "botocore.*",
+  "PIL",
+  "PIL.*",
+  "genblaze_core",
+  "genblaze_core.*",
+  "genblaze_gmicloud",
+  "genblaze_gmicloud.*",
+  "genblaze_s3",
+  "genblaze_s3.*",
+]
 ignore_missing_imports = true
-

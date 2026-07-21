@@ -34,7 +34,9 @@ class ObjectKeys:
         )
 
     def upload_normalized(self, user_id: str, upload_id: str) -> str:
-        return f"{self._user_root(user_id)}/uploads/{_segment(upload_id, 'upload_id')}/normalized.jpg"
+        return (
+            f"{self._user_root(user_id)}/uploads/{_segment(upload_id, 'upload_id')}/normalized.jpg"
+        )
 
     def garment_source_crop(self, user_id: str, garment_id: str, crop_id: str) -> str:
         return (
@@ -51,26 +53,36 @@ class ObjectKeys:
     def garment_cutout(self, user_id: str, garment_id: str, version: int) -> str:
         if version < 1:
             raise ValueError("version must be positive")
-        return f"{self._user_root(user_id)}/garments/{_segment(garment_id, 'garment_id')}/cutouts/{version}.png"
+        return (
+            f"{self._user_root(user_id)}/garments/"
+            f"{_segment(garment_id, 'garment_id')}/cutouts/{version}.png"
+        )
 
     def garment_thumbnail(self, user_id: str, garment_id: str, version: int) -> str:
         if version < 1:
             raise ValueError("version must be positive")
-        return f"{self._user_root(user_id)}/garments/{_segment(garment_id, 'garment_id')}/thumbnails/{version}.webp"
+        return (
+            f"{self._user_root(user_id)}/garments/"
+            f"{_segment(garment_id, 'garment_id')}/thumbnails/{version}.webp"
+        )
 
     def look_render(self, user_id: str, look_id: str, version: int) -> str:
         if version < 1:
             raise ValueError("version must be positive")
-        return f"{self._user_root(user_id)}/looks/{_segment(look_id, 'look_id')}/renders/{version}.png"
+        return (
+            f"{self._user_root(user_id)}/looks/{_segment(look_id, 'look_id')}/renders/{version}.png"
+        )
 
     def look_thumbnail(self, user_id: str, look_id: str, version: int) -> str:
         if version < 1:
             raise ValueError("version must be positive")
-        return f"{self._user_root(user_id)}/looks/{_segment(look_id, 'look_id')}/thumbnails/{version}.webp"
+        return (
+            f"{self._user_root(user_id)}/looks/"
+            f"{_segment(look_id, 'look_id')}/thumbnails/{version}.webp"
+        )
 
     def manifest(self, user_id: str, run_id: str) -> str:
         return f"{self._user_root(user_id)}/manifests/{_segment(run_id, 'run_id')}.json"
 
     def export(self, user_id: str, export_id: str) -> str:
         return f"{self._user_root(user_id)}/exports/{_segment(export_id, 'export_id')}.zip"
-

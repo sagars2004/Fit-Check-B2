@@ -4,9 +4,10 @@ import asyncio
 import hashlib
 import json
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping, Protocol
+from typing import Protocol
 from urllib.parse import quote
 
 import boto3
@@ -100,16 +101,22 @@ class LocalObjectStorage:
         try:
             return await asyncio.to_thread(path.read_bytes)
         except FileNotFoundError as error:
-            raise FitCheckError("OBJECT_NOT_FOUND", "The requested asset is unavailable.") from error
+            raise FitCheckError(
+                "OBJECT_NOT_FOUND", "The requested asset is unavailable."
+            ) from error
 
     async def head(self, key: str) -> StoredObject:
         path = self._path_for(key)
         try:
             content = await asyncio.to_thread(path.read_bytes)
             metadata_path = path.with_suffix(f"{path.suffix}.metadata.json")
-            raw_metadata = json.loads(await asyncio.to_thread(metadata_path.read_text, encoding="utf-8"))
+            raw_metadata = json.loads(
+                await asyncio.to_thread(metadata_path.read_text, encoding="utf-8")
+            )
         except FileNotFoundError as error:
-            raise FitCheckError("OBJECT_NOT_FOUND", "The requested asset is unavailable.") from error
+            raise FitCheckError(
+                "OBJECT_NOT_FOUND", "The requested asset is unavailable."
+            ) from error
         return StoredObject(
             key=key,
             sha256=raw_metadata["metadata"]["sha256"],
@@ -128,7 +135,10 @@ class LocalObjectStorage:
     ) -> str:
         raise FitCheckError(
             "LOCAL_DIRECT_UPLOAD_UNAVAILABLE",
-            "Local mock storage does not issue browser upload URLs. Upload through the API in development.",
+            (
+                "Local mock storage does not issue browser upload URLs. "
+                "Upload through the API in development."
+            ),
         )
 
 
@@ -195,9 +205,11 @@ class B2ObjectStorage:
         def get() -> bytes:
             try:
                 response = self.client.get_object(Bucket=self.bucket, Key=key)
-                return response["Body"].read()
+                return bytes(response["Body"].read())
             except self.client.exceptions.NoSuchKey as error:
-                raise FitCheckError("OBJECT_NOT_FOUND", "The requested asset is unavailable.") from error
+                raise FitCheckError(
+                    "OBJECT_NOT_FOUND", "The requested asset is unavailable."
+                ) from error
 
         return await asyncio.to_thread(get)
 
@@ -206,7 +218,9 @@ class B2ObjectStorage:
             try:
                 response = self.client.head_object(Bucket=self.bucket, Key=key)
             except self.client.exceptions.ClientError as error:
-                raise FitCheckError("OBJECT_NOT_FOUND", "The requested asset is unavailable.") from error
+                raise FitCheckError(
+                    "OBJECT_NOT_FOUND", "The requested asset is unavailable."
+                ) from error
             metadata = response.get("Metadata", {})
             return StoredObject(
                 key=key,
@@ -241,4 +255,3 @@ def build_storage(settings: Settings) -> ObjectStorage:
     if settings.storage_mode is StorageMode.LOCAL:
         return LocalObjectStorage(settings.media_root, settings.public_media_base_url)
     return B2ObjectStorage(settings)
-

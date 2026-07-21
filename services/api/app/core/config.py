@@ -45,7 +45,6 @@ class Settings(BaseSettings):
     auto_create_schema: bool = True
     local_media_root: Path = Path("./local-media")
     public_media_base_url: str = "http://localhost:8000/v1/media"
-    fit_check_storage_prefix: str = "fit-check"
     demo_user_id: str = "00000000-0000-0000-0000-000000000001"
 
     b2_endpoint_url: str | None = None
@@ -75,7 +74,7 @@ class Settings(BaseSettings):
     max_concurrent_generations: int = Field(default=2, ge=1, le=10)
     sentry_dsn: str | None = None
 
-    @field_validator("fit_check_storage_prefix", "b2_prefix")
+    @field_validator("b2_prefix")
     @classmethod
     def validate_prefix(cls, value: str) -> str:
         normalized = value.strip("/")
@@ -126,4 +125,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

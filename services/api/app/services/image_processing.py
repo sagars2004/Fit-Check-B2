@@ -72,7 +72,9 @@ def validate_cutout_png(source: bytes) -> ImageQaResult:
             left, top, right, bottom = bbox
             if left == 0 or top == 0 or right == rgba.width or bottom == rgba.height:
                 warnings.append("clipped_extremity")
-            if (right - left) < max(16, rgba.width // 20) or (bottom - top) < max(16, rgba.height // 20):
+            if (right - left) < max(16, rgba.width // 20) or (bottom - top) < max(
+                16, rgba.height // 20
+            ):
                 warnings.append("subject_too_small")
         return ImageQaResult(
             passed=not warnings,
@@ -88,12 +90,12 @@ def perceptual_input_fingerprint(source: bytes) -> str:
     """A stable, cheap local fingerprint for coarse duplicate ranking."""
     with Image.open(BytesIO(source)) as image:
         grayscale = ImageOps.exif_transpose(image).convert("L").resize((16, 16))
-        average = sum(grayscale.getdata()) / 256
-        bits = "".join("1" if pixel >= average else "0" for pixel in grayscale.getdata())
+        pixels = grayscale.tobytes()
+        average = sum(pixels) / len(pixels)
+        bits = "".join("1" if pixel >= average else "0" for pixel in pixels)
         return hashlib.sha256(bits.encode("ascii")).hexdigest()
 
 
 def alpha_content_bbox(source: bytes) -> tuple[int, int, int, int] | None:
     with Image.open(BytesIO(source)).convert("RGBA") as image:
         return ImageChops.difference(image.getchannel("A"), Image.new("L", image.size)).getbbox()
-

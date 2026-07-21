@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
+from dataclasses import replace
 from typing import Any
 
 import httpx
@@ -19,14 +20,15 @@ class GMICloudCapabilityClient:
         self.settings = settings
 
     def _headers(self) -> dict[str, str]:
-        if not self.settings.has_gmi_credentials():
+        api_key = self.settings.gmi_api_key
+        if api_key is None or not api_key.get_secret_value():
             raise FitCheckError(
                 "GMI_CONFIGURATION_MISSING",
                 "GMI credentials are not configured.",
                 recommended_action="Set GMI_API_KEY only on the API/worker environment.",
             )
         headers = {
-            "Authorization": f"Bearer {self.settings.gmi_api_key.get_secret_value()}",
+            "Authorization": f"Bearer {api_key.get_secret_value()}",
             "Accept": "application/json",
         }
         if self.settings.gmi_org_id:
@@ -69,9 +71,13 @@ class GMICloudCapabilityClient:
             raise FitCheckError(
                 "SMOKE_TEST_DISABLED",
                 "Provider smoke tests are disabled.",
-                recommended_action="Set ENABLE_PROVIDER_SMOKE_TESTS=true for a deliberate server-side probe.",
+                recommended_action=(
+                    "Set ENABLE_PROVIDER_SMOKE_TESTS=true for a deliberate server-side probe."
+                ),
             )
-        media_models, llm_models = await asyncio.gather(self.list_media_models(), self.list_llm_models())
+        media_models, llm_models = await asyncio.gather(
+            self.list_media_models(), self.list_llm_models()
+        )
         # IDs are returned to the server operator for explicit review; none is auto-selected.
         return {
             "media_models": media_models,
@@ -88,22 +94,56 @@ class GenblazeGMICloudOrchestrator:
     """Production adapter: GMI Cloud generation through Genblaze + B2 sink.
 
     It is intentionally not called until the model capability probe has chosen a
-    configured model. Genblaze owns provider retry/polling and writes its own
-    hash-verified run manifest to the configured B2 sink.
+    configured model. Genblaze owns the provider pipeline and B2 run manifest;
+    Fit Check adds bounded retries for explicitly retryable failed runs and
+    stores that retry ledger alongside its provenance manifest.
     """
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
     async def generate_image(self, request: ImageGenerationRequest) -> GeneratedMedia:
-        return await asyncio.to_thread(self._generate_sync, request)
+        retry_history: list[dict[str, Any]] = []
+        maximum_attempts = self.settings.gmi_max_retries + 1
+
+        for attempt_number in range(1, maximum_attempts + 1):
+            try:
+                generated = await asyncio.to_thread(self._generate_sync, request)
+            except FitCheckError as error:
+                if not error.retryable or attempt_number == maximum_attempts:
+                    raise
+
+                backoff_seconds = _retry_backoff_seconds(attempt_number)
+                retry_history.append(
+                    {
+                        "attempt": attempt_number,
+                        "error_code": error.code,
+                        "correlation_id": error.correlation_id,
+                        "backoff_seconds": backoff_seconds,
+                    }
+                )
+                await asyncio.sleep(backoff_seconds)
+                continue
+
+            return replace(generated, retry_history=tuple(retry_history))
+
+        # The loop always either returns a successful result or re-raises the
+        # final error. This satisfies static type checkers without concealing an
+        # unexpected control-flow change.
+        raise AssertionError("generation retry loop exited unexpectedly")
 
     def _generate_sync(self, request: ImageGenerationRequest) -> GeneratedMedia:
-        if not self.settings.has_gmi_credentials():
+        api_key = self.settings.gmi_api_key
+        b2_bucket = self.settings.b2_bucket
+        b2_key_id = self.settings.b2_key_id
+        b2_app_key = self.settings.b2_app_key
+        if api_key is None or not api_key.get_secret_value():
             raise FitCheckError("GMI_CONFIGURATION_MISSING", "GMI credentials are not configured.")
         model = request.model or self.settings.selected_image_model()
-        if not self.settings.b2_bucket:
-            raise FitCheckError("B2_CONFIGURATION_MISSING", "Live generation requires private B2 storage.")
+        if not b2_bucket or b2_key_id is None or b2_app_key is None:
+            raise FitCheckError(
+                "B2_CONFIGURATION_MISSING", "Live generation requires private B2 storage."
+            )
 
         # SDK imports stay isolated from mock mode and preserve the official
         # Genblaze pipeline + B2 ObjectStorageSink architecture.
@@ -111,13 +151,19 @@ class GenblazeGMICloudOrchestrator:
         from genblaze_gmicloud import GMICloudImageProvider
         from genblaze_s3 import S3StorageBackend
 
-        os.environ.setdefault("B2_KEY_ID", self.settings.b2_key_id.get_secret_value() if self.settings.b2_key_id else "")
-        os.environ.setdefault("B2_APP_KEY", self.settings.b2_app_key.get_secret_value() if self.settings.b2_app_key else "")
+        os.environ.setdefault(
+            "B2_KEY_ID",
+            b2_key_id.get_secret_value(),
+        )
+        os.environ.setdefault(
+            "B2_APP_KEY",
+            b2_app_key.get_secret_value(),
+        )
         sink = ObjectStorageSink(
-            S3StorageBackend.for_backblaze(self.settings.b2_bucket),
+            S3StorageBackend.for_backblaze(b2_bucket),
             key_strategy=KeyStrategy.HIERARCHICAL,
         )
-        provider = GMICloudImageProvider(api_key=self.settings.gmi_api_key.get_secret_value())
+        provider = GMICloudImageProvider(api_key=api_key.get_secret_value())
         step_kwargs: dict[str, Any] = {
             "model": model,
             "prompt": request.prompt,
@@ -130,7 +176,14 @@ class GenblazeGMICloudOrchestrator:
             step_kwargs["reference_image_urls"] = list(request.source_urls)
 
         pipeline = Pipeline(request.pipeline_slug).step(provider, **step_kwargs)
-        result = pipeline.run(sink=sink, timeout=self.settings.gmi_generation_timeout_seconds)
+        try:
+            result = pipeline.run(sink=sink, timeout=self.settings.gmi_generation_timeout_seconds)
+        except Exception as error:
+            raise FitCheckError(
+                "GENBLAZE_EXECUTION_FAILED",
+                "Genblaze could not complete the GMI image generation run.",
+                retryable=True,
+            ) from error
         run, manifest = _unpack_genblaze_result(result)
         step = run.steps[-1]
         if getattr(step, "status", None) != "succeeded" or not getattr(step, "assets", None):
@@ -152,6 +205,12 @@ class GenblazeGMICloudOrchestrator:
         )
 
 
+def _retry_backoff_seconds(attempt_number: int) -> float:
+    """Bound retry latency while preserving a simple, auditable retry ledger."""
+
+    return min(float(2 ** (attempt_number - 1)), 8.0)
+
+
 def _unpack_genblaze_result(result: Any) -> tuple[Any, Any]:
     if isinstance(result, tuple) and len(result) == 2:
         return result
@@ -170,4 +229,3 @@ def _model_to_dict(value: Any) -> dict[str, Any]:
         dumped = value.dict()
         return dumped if isinstance(dumped, dict) else {"raw": dumped}
     return {"raw": str(value)}
-

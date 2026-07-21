@@ -8,4 +8,3 @@ def build_media_orchestrator(settings: Settings) -> MediaOrchestrator:
     if settings.provider_mode is ProviderMode.MOCK:
         return MockMediaOrchestrator()
     return GenblazeGMICloudOrchestrator(settings)
-
