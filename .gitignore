@@ -1,0 +1,30 @@
+# JavaScript
+node_modules/
+.next/
+out/
+coverage/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+*.egg-info/
+
+# Local application state and media. Never commit user wardrobe media.
+.data/
+local-media/
+services/api/.data/
+services/api/local-media/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/

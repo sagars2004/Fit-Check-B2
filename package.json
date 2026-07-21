@@ -1,0 +1,18 @@
+{
+  "name": "fit-check",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace=@fit-check/web",
+    "build:web": "npm run build --workspace=@fit-check/web",
+    "lint:web": "npm run lint --workspace=@fit-check/web",
+    "typecheck:web": "npm run typecheck --workspace=@fit-check/web"
+  },
+  "engines": {
+    "node": ">=20.15.0",
+    "npm": ">=10.0.0"
+  }
+}
