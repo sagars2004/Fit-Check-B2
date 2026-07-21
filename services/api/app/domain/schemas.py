@@ -66,6 +66,33 @@ class UploadFinalizeResponse(BaseModel):
     normalized_key: str | None = None
 
 
+class ModelProfileUploadRequest(BaseModel):
+    """Request a private reference-image target after explicit consent."""
+
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: str = Field(min_length=3, max_length=120)
+    size_bytes: int | None = Field(default=None, ge=1, le=104_857_600)
+    consent: bool = False
+
+
+class ModelProfilePresignResponse(BaseModel):
+    profile_id: str
+    mode: Literal["api_proxy", "direct_b2"]
+    upload_url: str
+    source_image_key: str
+    expires_in_seconds: int | None = None
+
+
+class ModelProfileResponse(BaseModel):
+    id: str
+    status: str
+    source_image_key: str
+    source_image_url: str | None = None
+    sha256: str | None = None
+    consented_at: datetime
+    created_at: datetime
+
+
 class ImportCreateRequest(BaseModel):
     upload_ids: list[str] = Field(min_length=1, max_length=20)
 
@@ -257,3 +284,41 @@ class WearEventResponse(BaseModel):
     outfit_status: str
     garment_wear_counts: dict[str, int]
     garment_cost_per_wear: dict[str, float | None]
+
+
+class TryOnRenderRequest(BaseModel):
+    profile_id: str = Field(min_length=1, max_length=36)
+    parent_run_id: str | None = Field(default=None, min_length=1, max_length=255)
+    correction_hint: str | None = Field(default=None, min_length=1, max_length=500)
+
+
+class TryOnSourceGarmentResponse(BaseModel):
+    id: str
+    name: str
+    category: str
+    colors: list[str]
+    evidence_status: str
+    source_kind: str
+    image_url: str | None = None
+
+
+class TryOnRenderResponse(BaseModel):
+    id: str
+    outfit_id: str
+    profile_id: str
+    status: str
+    object_key: str | None = None
+    render_url: str | None = None
+    sha256: str | None = None
+    run_id: str | None = None
+    parent_run_id: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    source_garment_ids: list[str]
+    source_garments: list[TryOnSourceGarmentResponse]
+    reference_image_url: str | None = None
+    disclosure: str
+    provenance_entity_type: Literal["tryon_render"] = "tryon_render"
+    created_at: datetime

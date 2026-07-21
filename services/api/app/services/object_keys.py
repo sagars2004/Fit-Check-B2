@@ -38,6 +38,14 @@ class ObjectKeys:
             f"{self._user_root(user_id)}/uploads/{_segment(upload_id, 'upload_id')}/normalized.jpg"
         )
 
+    def model_profile_reference(self, user_id: str, profile_id: str, extension: str) -> str:
+        """Keep personal try-on reference photos separate from wardrobe media."""
+
+        return (
+            f"{self._user_root(user_id)}/profiles/{_segment(profile_id, 'profile_id')}/"
+            f"reference.{_segment(extension.lower().lstrip('.'), 'extension')}"
+        )
+
     def candidate_source_crop(self, user_id: str, upload_id: str, candidate_id: str) -> str:
         """Keep pre-approval evidence under the upload that produced it.
 

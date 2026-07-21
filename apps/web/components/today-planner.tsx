@@ -13,7 +13,12 @@ import {
 
 type ActiveAction = { outfitId: string; kind: "save" | "wear" | "undo" } | null;
 
-export function TodayPlanner() {
+type TodayPlannerProps = {
+  onPreviewOutfit?: (outfit: OutfitPlan) => void;
+  selectedPreviewOutfitId?: string | null;
+};
+
+export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }: TodayPlannerProps) {
   const [location, setLocation] = useState("New York, NY");
   const [forecastDate, setForecastDate] = useState(todayIso());
   const [occasion, setOccasion] = useState("Rainy workday");
@@ -180,9 +185,11 @@ export function TodayPlanner() {
               <OutfitCard
                 activeAction={activeAction}
                 key={outfit.id}
+                onPreview={onPreviewOutfit}
                 onSave={handleSave}
                 onWear={handleWear}
                 outfit={outfit}
+                previewSelected={selectedPreviewOutfitId === outfit.id}
                 rank={index + 1}
               />
             ))}
@@ -197,15 +204,19 @@ export function TodayPlanner() {
 
 function OutfitCard({
   activeAction,
+  onPreview,
   onSave,
   onWear,
   outfit,
+  previewSelected,
   rank,
 }: {
   activeAction: ActiveAction;
+  onPreview?: (outfit: OutfitPlan) => void;
   onSave: (outfitId: string) => Promise<void>;
   onWear: (outfit: OutfitPlan, action: "wear" | "undo") => Promise<void>;
   outfit: OutfitPlan;
+  previewSelected: boolean;
   rank: number;
 }) {
   const saving = activeAction?.outfitId === outfit.id;
@@ -234,6 +245,16 @@ function OutfitCard({
             {saving && activeAction?.kind === "wear" ? "Logging…" : "Wear it"}
           </button>
         )}
+        {onPreview ? (
+          <button
+            aria-pressed={previewSelected}
+            className={previewSelected ? "preview-button preview-button-selected" : "preview-button"}
+            onClick={() => onPreview(outfit)}
+            type="button"
+          >
+            {previewSelected ? "Selected for preview" : "Preview on me"}
+          </button>
+        ) : null}
       </div>
     </article>
   );

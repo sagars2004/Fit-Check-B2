@@ -40,6 +40,8 @@ class ObjectStorage(Protocol):
 
     async def head(self, key: str) -> StoredObject: ...
 
+    async def delete(self, key: str) -> None: ...
+
     async def signed_read_url(self, key: str, expires_seconds: int | None = None) -> str: ...
 
     async def signed_upload_url(
@@ -124,6 +126,17 @@ class LocalObjectStorage:
             content_type=raw_metadata["content_type"],
             metadata=raw_metadata["metadata"],
         )
+
+    async def delete(self, key: str) -> None:
+        """Remove one private mock object and its sidecar metadata idempotently."""
+
+        path = self._path_for(key)
+
+        def remove() -> None:
+            path.unlink(missing_ok=True)
+            path.with_suffix(f"{path.suffix}.metadata.json").unlink(missing_ok=True)
+
+        await asyncio.to_thread(remove)
 
     async def signed_read_url(self, key: str, expires_seconds: int | None = None) -> str:
         self._path_for(key)
@@ -231,6 +244,9 @@ class B2ObjectStorage:
             )
 
         return await asyncio.to_thread(read_head)
+
+    async def delete(self, key: str) -> None:
+        await asyncio.to_thread(self.client.delete_object, Bucket=self.bucket, Key=key)
 
     async def signed_read_url(self, key: str, expires_seconds: int | None = None) -> str:
         return await asyncio.to_thread(

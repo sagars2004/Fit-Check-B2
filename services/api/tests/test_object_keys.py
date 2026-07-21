@@ -11,6 +11,9 @@ def test_prd_object_keys_are_stable() -> None:
     assert keys.upload_normalized("user-1", "upload-1") == (
         "fit-check/users/user-1/uploads/upload-1/normalized.jpg"
     )
+    assert keys.model_profile_reference("user-1", "profile-1", ".PNG") == (
+        "fit-check/users/user-1/profiles/profile-1/reference.png"
+    )
     assert keys.garment_cutout("user-1", "garment-1", 2) == (
         "fit-check/users/user-1/garments/garment-1/cutouts/2.png"
     )

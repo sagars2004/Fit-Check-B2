@@ -226,6 +226,54 @@ export type WearEvent = {
   garment_cost_per_wear: Record<string, number | null>;
 };
 
+export type ModelProfile = {
+  id: string;
+  status: string;
+  source_image_key: string;
+  consented_at: string;
+  source_image_url: string | null;
+  sha256: string | null;
+  created_at: string;
+};
+
+export type ModelProfileUploadTarget = {
+  profile_id: string;
+  mode: "api_proxy" | "direct_b2";
+  upload_url: string;
+  source_image_key: string;
+  expires_in_seconds: number | null;
+};
+
+export type TryOnRender = {
+  id: string;
+  outfit_id: string;
+  profile_id: string;
+  status: "preview_generating" | "preview_ready" | "failed" | string;
+  object_key: string | null;
+  render_url: string | null;
+  sha256: string | null;
+  run_id: string | null;
+  parent_run_id: string | null;
+  provider: string | null;
+  model: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string;
+  source_garment_ids: string[];
+  source_garments: Array<{
+    id: string;
+    name: string;
+    category: string;
+    colors: string[];
+    evidence_status: "verified_source_backed" | "ai_reconstructed" | "needs_better_photo" | string;
+    image_url: string | null;
+    source_kind: "approved_cutout" | "source_crop_fallback" | string;
+  }>;
+  reference_image_url: string | null;
+  disclosure: string;
+  provenance_entity_type: "tryon_render";
+};
+
 export async function getHealth(): Promise<Health> {
   return requestJson<Health>("/health");
 }
@@ -237,8 +285,11 @@ export async function createMockCutout(): Promise<DemoAsset> {
   });
 }
 
-export async function getProvenance(assetId: string): Promise<Provenance> {
-  return requestJson<Provenance>("/v1/provenance/garment_asset/" + assetId);
+export async function getProvenance(
+  entityId: string,
+  entityType = "garment_asset",
+): Promise<Provenance> {
+  return requestJson<Provenance>(`/v1/provenance/${entityType}/${entityId}`);
 }
 
 export async function uploadPhotos(files: File[]): Promise<{ uploads: UploadResult[]; errors: string[] }> {
@@ -381,6 +432,63 @@ export async function recordOutfitWear(
     method: "POST",
     body: JSON.stringify({ action, worn_on: wornOn }),
   });
+}
+
+export async function getModelProfiles(): Promise<ModelProfile[]> {
+  return requestJson<ModelProfile[]>("/v1/model-profiles");
+}
+
+export async function uploadReferencePhoto(file: File): Promise<ModelProfile> {
+  const target = await requestJson<ModelProfileUploadTarget>("/v1/model-profiles/presign", {
+    method: "POST",
+    body: JSON.stringify({
+      filename: file.name,
+      content_type: file.type || guessContentType(file.name),
+      size_bytes: file.size,
+      consent: true,
+    }),
+  });
+  const response = await fetch(absoluteApiUrl(target.upload_url), {
+    method: "PUT",
+    headers: { "Content-Type": file.type || guessContentType(file.name) },
+    body: file,
+  });
+  if (!response.ok) {
+    throw new Error(await responseMessage(response, "This reference photo could not be saved securely."));
+  }
+  if (target.mode === "api_proxy") {
+    return response.json() as Promise<ModelProfile>;
+  }
+  return requestJson<ModelProfile>(`/v1/model-profiles/${target.profile_id}/finalize`, {
+    method: "POST",
+  });
+}
+
+export async function deleteModelProfile(profileId: string): Promise<void> {
+  const response = await fetch(absoluteApiUrl(`/v1/model-profiles/${profileId}`), { method: "DELETE" });
+  if (!response.ok) {
+    throw new Error(await responseMessage(response, "That reference photo could not be removed."));
+  }
+}
+
+export async function renderOutfit(
+  outfitId: string,
+  profileId: string,
+  parentRunId?: string,
+  correctionHint?: string,
+): Promise<TryOnRender> {
+  return requestJson<TryOnRender>(`/v1/outfits/${outfitId}/render`, {
+    method: "POST",
+    body: JSON.stringify({
+      profile_id: profileId,
+      ...(parentRunId ? { parent_run_id: parentRunId } : {}),
+      ...(correctionHint ? { correction_hint: correctionHint } : {}),
+    }),
+  });
+}
+
+export async function getOutfitRenders(outfitId: string): Promise<TryOnRender[]> {
+  return requestJson<TryOnRender[]>(`/v1/outfits/${outfitId}/renders`);
 }
 
 export function localMockMediaUrl(objectKey: string): string {

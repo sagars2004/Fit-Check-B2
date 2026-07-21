@@ -1,5 +1,5 @@
 import { MilestoneZeroConsole } from "../components/milestone-zero-console";
-import { TodayPlanner } from "../components/today-planner";
+import { TodayAndPreview } from "../components/today-and-preview";
 import { WardrobeImport } from "../components/wardrobe-import";
 
 const principles = [
@@ -27,7 +27,7 @@ export default function Home() {
         </p>
       </section>
 
-      <TodayPlanner />
+      <TodayAndPreview />
 
       <WardrobeImport />
 
@@ -46,11 +46,11 @@ export default function Home() {
       </section>
 
       <section className="next-up">
-        <p className="eyebrow">Next milestone</p>
-        <h2>Choose one owned look, then preview it on you.</h2>
+        <p className="eyebrow">Private by design</p>
+        <h2>Choose one owned look, then review one clear AI preview.</h2>
         <p>
-          A virtual try-on will remain opt-in, visibly labeled as an AI preview, and linked back to
-          its source evidence.
+          Personal reference photos require explicit consent, remain separate from your wardrobe,
+          and can be removed independently. Every preview stays visibly linked to its source evidence.
         </p>
       </section>
     </main>

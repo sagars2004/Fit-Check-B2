@@ -23,10 +23,15 @@ from app.domain.schemas import (
     ImportCreateRequest,
     ImportJobResponse,
     MockPipelineRequest,
+    ModelProfilePresignResponse,
+    ModelProfileResponse,
+    ModelProfileUploadRequest,
     OutfitPlanResponse,
     OutfitRecommendationResponse,
     OutfitRecommendRequest,
     ProvenanceResponse,
+    TryOnRenderRequest,
+    TryOnRenderResponse,
     UploadFinalizeResponse,
     UploadPresignRequest,
     UploadPresignResponse,
@@ -36,6 +41,7 @@ from app.domain.schemas import (
 from app.providers.gmi import GMICloudCapabilityClient
 from app.services.storage import LocalObjectStorage
 from app.workflows.milestone_one import MilestoneOneWorkflow
+from app.workflows.milestone_three import MilestoneThreeWorkflow
 from app.workflows.milestone_two import MilestoneTwoWorkflow
 from app.workflows.milestone_zero import MilestoneZeroWorkflow
 
@@ -53,6 +59,14 @@ def _milestone_one_workflow(request: Request) -> MilestoneOneWorkflow:
 def _milestone_two_workflow(request: Request) -> MilestoneTwoWorkflow:
     return MilestoneTwoWorkflow(
         request.app.state.settings, request.app.state.storage, request.app.state.weather
+    )
+
+
+def _milestone_three_workflow(request: Request) -> MilestoneThreeWorkflow:
+    return MilestoneThreeWorkflow(
+        request.app.state.settings,
+        request.app.state.storage,
+        request.app.state.orchestrator,
     )
 
 
@@ -80,6 +94,57 @@ async def receive_local_upload(
     return await _milestone_one_workflow(request).receive_local_upload(
         session, upload_id, await request.body()
     )
+
+
+@router.post(
+    "/model-profiles/presign",
+    response_model=ModelProfilePresignResponse,
+    status_code=201,
+)
+async def request_model_profile_upload_url(
+    payload: ModelProfileUploadRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> ModelProfilePresignResponse:
+    return await _milestone_three_workflow(request).request_profile_upload(session, payload)
+
+
+@router.put("/model-profiles/{profile_id}/content", response_model=ModelProfileResponse)
+async def receive_local_model_profile_upload(
+    profile_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> ModelProfileResponse:
+    return await _milestone_three_workflow(request).receive_local_profile_upload(
+        session, profile_id, await request.body()
+    )
+
+
+@router.post("/model-profiles/{profile_id}/finalize", response_model=ModelProfileResponse)
+async def finalize_model_profile_upload(
+    profile_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> ModelProfileResponse:
+    return await _milestone_three_workflow(request).finalize_profile(session, profile_id)
+
+
+@router.get("/model-profiles", response_model=list[ModelProfileResponse])
+async def list_model_profiles(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> list[ModelProfileResponse]:
+    return await _milestone_three_workflow(request).list_profiles(session)
+
+
+@router.delete("/model-profiles/{profile_id}", status_code=204)
+async def delete_model_profile(
+    profile_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> Response:
+    await _milestone_three_workflow(request).delete_profile(session, profile_id)
+    return Response(status_code=204)
 
 
 @router.post("/imports", response_model=ImportJobResponse, status_code=201)
@@ -228,6 +293,25 @@ async def record_outfit_wear(
     session: AsyncSession = Depends(get_session),
 ) -> WearEventResponse:
     return await _milestone_two_workflow(request).record_wear(session, outfit_id, payload)
+
+
+@router.post("/outfits/{outfit_id}/render", response_model=TryOnRenderResponse, status_code=201)
+async def render_outfit_preview(
+    outfit_id: str,
+    payload: TryOnRenderRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> TryOnRenderResponse:
+    return await _milestone_three_workflow(request).render_outfit(session, outfit_id, payload)
+
+
+@router.get("/outfits/{outfit_id}/renders", response_model=list[TryOnRenderResponse])
+async def list_outfit_renders(
+    outfit_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> list[TryOnRenderResponse]:
+    return await _milestone_three_workflow(request).list_renders(session, outfit_id)
 
 
 @router.post("/demo/mock-cutout", response_model=DemoAssetResponse, status_code=201)
