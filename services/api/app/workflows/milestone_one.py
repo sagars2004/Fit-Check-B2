@@ -8,7 +8,7 @@ from typing import Any, cast
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings, StorageMode
+from app.core.config import ProviderMode, Settings, StorageMode
 from app.core.errors import FitCheckError
 from app.db.models import (
     DuplicateReview,
@@ -38,6 +38,7 @@ from app.domain.schemas import (
     UploadPresignRequest,
     UploadPresignResponse,
 )
+from app.providers.contracts import ImageGenerationRequest, MediaOrchestrator
 from app.services.image_processing import (
     approximate_color_name,
     chroma_to_transparent,
@@ -73,9 +74,15 @@ class MilestoneOneWorkflow:
     Live provider generation stays gated behind the capability-tested path.
     """
 
-    def __init__(self, settings: Settings, storage: ObjectStorage) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        storage: ObjectStorage,
+        orchestrator: MediaOrchestrator,
+    ) -> None:
         self.settings = settings
         self.storage = storage
+        self.orchestrator = orchestrator
         self.keys = ObjectKeys(settings.b2_prefix)
 
     async def request_upload(
@@ -407,31 +414,143 @@ class MilestoneOneWorkflow:
         version = (previous_asset.version if previous_asset is not None else 0) + 1
         parent_run_id = previous_asset.run_id if previous_asset is not None else None
         source = await self.storage.get_bytes(evidence.crop_key)
-        output = chroma_to_transparent(source)
-        qa = validate_cutout_png(output)
+        
         asset_id = new_id()
-        run_id = f"local-cutout-{new_id()}"
-        object_key = self.keys.garment_cutout(user.id, garment.id, version)
-        stored = await self.storage.put_bytes(
-            object_key,
-            output,
-            content_type="image/png",
-            metadata={
-                "asset-id": asset_id,
-                "run-id": run_id,
-                "source-evidence-id": evidence.id,
-                "qa-status": "awaiting_review" if qa.passed else "failed",
-            },
-        )
-        persisted = await self.storage.head(object_key)
-        if persisted.sha256 != stored.sha256:
-            raise FitCheckError(
-                "STORAGE_HASH_MISMATCH",
-                "Saving securely failed validation.",
-                retryable=True,
-                entity_id=garment.id,
-                correlation_id=run_id,
+        if self.settings.provider_mode is ProviderMode.MOCK:
+            output = chroma_to_transparent(source)
+            run_id = f"local-cutout-{new_id()}"
+            provider = "local"
+            model = "deterministic-chroma-key/v1"
+            
+            qa = validate_cutout_png(output)
+            
+            object_key = self.keys.garment_cutout(user.id, garment.id, version)
+            stored = await self.storage.put_bytes(
+                object_key,
+                output,
+                content_type="image/png",
+                metadata={
+                    "asset-id": asset_id,
+                    "run-id": run_id,
+                    "source-evidence-id": evidence.id,
+                    "qa-status": "awaiting_review" if qa.passed else "failed",
+                },
             )
+            persisted = await self.storage.head(object_key)
+            if persisted.sha256 != stored.sha256:
+                raise FitCheckError(
+                    "STORAGE_HASH_MISMATCH",
+                    "Saving securely failed validation.",
+                    retryable=True,
+                    entity_id=garment.id,
+                    correlation_id=run_id,
+                )
+            
+            content_type = "image/png"
+            asset_sha256 = stored.sha256
+            manifest = MediaProvenanceManifest(
+                run_id=run_id,
+                parent_run_id=parent_run_id,
+                pipeline_slug="fit-check-cutout",
+                tenant_id=user.id,
+                status="awaiting_review" if qa.passed else "failed",
+                provider=provider,
+                model=model,
+                prompt_template_version="m1b.deterministic-chroma/v1",
+                prompt_redacted="[no generative prompt; source-derived chroma removal]",
+                generation_parameters={"green_bias": 32, "version": version},
+                source_asset_ids=[evidence.id],
+                source_object_keys=[evidence.crop_key],
+                output={
+                    "asset_id": asset_id,
+                    "object_key": object_key,
+                    "sha256": stored.sha256,
+                    "content_type": content_type,
+                    "bytes": stored.size,
+                },
+                transformations=[
+                    {"name": "source_crop_reference", "sha256": evidence.sha256},
+                    {"name": "deterministic_chroma_removal", "green_bias": 32},
+                    {
+                        "name": "transparent_alpha_qa",
+                        "passed": qa.passed,
+                        "warnings": list(qa.warnings),
+                        "transparent_corners": qa.transparent_corner_count,
+                        "alpha_bbox": list(qa.alpha_bbox) if qa.alpha_bbox else None,
+                    },
+                ],
+                qa={
+                    "status": "awaiting_review" if qa.passed else "failed",
+                    "warnings": list(qa.warnings),
+                    "review_required": qa.passed,
+                    "evidence_status": "verified_source_backed" if qa.passed else "needs_better_photo",
+                },
+            )
+            manifest_key, manifest_hash = await persist_manifest(self.storage, self.keys, manifest)
+            redacted_manifest = manifest.owner_view()
+        else:
+            if not self.settings.gmi_image_model:
+                raise FitCheckError(
+                    "GMI_MODEL_UNCONFIGURED",
+                    "A valid GMI image model must be configured for live cutouts.",
+                )
+            
+            prompt = (
+                "Create a clean, catalog-style transparent PNG cutout of the garment in this image. "
+                "Exclude the wearer, skin, hair, adjacent garments, props, hangers, backgrounds, and invented details. "
+                "Make the background entirely transparent."
+            )
+            
+            request = ImageGenerationRequest(
+                pipeline_slug="fit-check-m1-cutout",
+                tenant_id=user.id,
+                garment_id=garment.id,
+                prompt=prompt,
+                prompt_redacted="[generative cutout extraction]",
+                prompt_template_version="m1.gmi-cutout/v1",
+                model=self.settings.gmi_image_model,
+                parent_run_id=parent_run_id,
+                source_asset_ids=(evidence.id,),
+                source_urls=(await self.storage.signed_read_url(evidence.crop_key),),
+                parameters={
+                    "purpose": "catalog_cutout",
+                    "output": "image/png",
+                }
+            )
+            generated = await self.orchestrator.generate_image(request)
+            if not generated.object_key:
+                raise FitCheckError(
+                    "GENERATION_OUTPUT_UNVERIFIABLE",
+                    "The provider did not return a verifiable cutout object key in B2.",
+                    retryable=True,
+                    entity_id=garment.id,
+                    correlation_id=generated.run_id,
+                )
+            
+            # Fetch the generated bytes from B2 to run QA checks
+            output = await self.storage.get_bytes(generated.object_key)
+            qa = validate_cutout_png(output)
+            
+            run_id = generated.run_id
+            provider = generated.provider
+            model = generated.model
+            object_key = generated.object_key
+            content_type = generated.content_type
+            asset_sha256 = generated.sha256
+            
+            # Trust Genblaze manifest
+            redacted_manifest = generated.provider_manifest
+            redacted_manifest["qa"] = {
+                "status": "awaiting_review" if qa.passed else "failed",
+                "warnings": list(qa.warnings),
+                "review_required": qa.passed,
+                "evidence_status": "verified_source_backed" if qa.passed else "needs_better_photo",
+            }
+            import hashlib
+            import json
+            payload = json.dumps(redacted_manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            manifest_hash = hashlib.sha256(payload).hexdigest()
+            manifest_key = f"genblaze/manifests/{generated.run_id}.json"
 
         asset_evidence_status = (
             AssetEvidenceStatus.VERIFIED_SOURCE_BACKED.value
@@ -439,59 +558,21 @@ class MilestoneOneWorkflow:
             else AssetEvidenceStatus.NEEDS_BETTER_PHOTO.value
         )
         qa_status = "awaiting_review" if qa.passed else "failed"
-        manifest = MediaProvenanceManifest(
-            run_id=run_id,
-            parent_run_id=parent_run_id,
-            pipeline_slug="fit-check-deterministic-cutout",
-            tenant_id=user.id,
-            status="awaiting_review" if qa.passed else "failed",
-            provider="local",
-            model="deterministic-chroma-key/v1",
-            prompt_template_version="m1b.deterministic-chroma/v1",
-            prompt_redacted="[no generative prompt; source-derived chroma removal]",
-            generation_parameters={"green_bias": 32, "version": version},
-            source_asset_ids=[evidence.id],
-            source_object_keys=[evidence.crop_key],
-            output={
-                "asset_id": asset_id,
-                "object_key": object_key,
-                "sha256": stored.sha256,
-                "content_type": "image/png",
-                "bytes": stored.size,
-            },
-            transformations=[
-                {"name": "source_crop_reference", "sha256": evidence.sha256},
-                {"name": "deterministic_chroma_removal", "green_bias": 32},
-                {
-                    "name": "transparent_alpha_qa",
-                    "passed": qa.passed,
-                    "warnings": list(qa.warnings),
-                    "transparent_corners": qa.transparent_corner_count,
-                    "alpha_bbox": list(qa.alpha_bbox) if qa.alpha_bbox else None,
-                },
-            ],
-            qa={
-                "status": qa_status,
-                "warnings": list(qa.warnings),
-                "review_required": qa.passed,
-                "evidence_status": asset_evidence_status,
-            },
-        )
-        manifest_key, manifest_hash = await persist_manifest(self.storage, self.keys, manifest)
+
         asset = GarmentAsset(
             id=asset_id,
             garment_id=garment.id,
             kind="cutout",
-            object_key=object_key,
-            sha256=stored.sha256,
             version=version,
+            object_key=object_key,
+            sha256=asset_sha256,
             qa_status=qa_status,
             qa_warnings=list(qa.warnings),
             evidence_status=asset_evidence_status,
             run_id=run_id,
             parent_run_id=parent_run_id,
-            provider="local",
-            model="deterministic-chroma-key/v1",
+            provider=provider,
+            model=model,
         )
         link = ProvenanceLink(
             entity_type="garment_asset",
@@ -501,7 +582,7 @@ class MilestoneOneWorkflow:
             run_id=run_id,
             parent_run_id=parent_run_id,
             privacy_scope="private",
-            redacted_manifest=manifest.owner_view(),
+            redacted_manifest=redacted_manifest,
         )
         if not qa.passed and garment.canonical_asset_id is None:
             garment.status = GarmentStatus.NEEDS_BETTER_PHOTO.value

@@ -27,6 +27,9 @@ class GeneratedMedia:
     content: bytes | None
     content_type: str
     source_asset_url: str | None = None
+    object_key: str | None = None
+    sha256: str | None = None
+    size_bytes: int | None = None
     provider_manifest: dict[str, Any] = field(default_factory=dict)
     retry_history: tuple[dict[str, Any], ...] = ()
 

@@ -56,7 +56,9 @@ def _settings(request: Request) -> Settings:
 
 
 def _milestone_one_workflow(request: Request) -> MilestoneOneWorkflow:
-    return MilestoneOneWorkflow(request.app.state.settings, request.app.state.storage)
+    return MilestoneOneWorkflow(
+        request.app.state.settings, request.app.state.storage, request.app.state.orchestrator
+    )
 
 
 def _milestone_two_workflow(request: Request) -> MilestoneTwoWorkflow:

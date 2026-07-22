@@ -309,67 +309,73 @@ class MilestoneThreeWorkflow:
                     },
                 )
             )
-            if generated.content is None:
-                raise FitCheckError(
-                    "GENERATION_OUTPUT_UNVERIFIABLE",
-                    (
-                        "The provider did not return a verifiable preview file, so Fit Check "
-                        "did not mark it ready."
-                    ),
-                    retryable=True,
-                    entity_id=render.id,
-                    correlation_id=generated.run_id,
-                    recommended_action=(
-                        "Retry after the provider returns a verified image artifact."
-                    ),
-                )
-            inspection = inspect_upload_image(generated.content)
-            object_key = self.keys.look_render(user.id, render.id, 1)
-            stored = await self.storage.put_bytes(
-                object_key,
-                generated.content,
-                content_type=inspection.content_type,
-                metadata={
-                    "render-id": render.id,
-                    "run-id": generated.run_id,
-                    "profile-id": profile.id,
-                    "outfit-id": outfit.id,
-                    "disclosure": "ai-preview",
-                },
-            )
-            persisted = await self.storage.head(object_key)
-            if persisted.sha256 != stored.sha256:
-                raise FitCheckError(
-                    "STORAGE_HASH_MISMATCH",
-                    "Saving the generated preview securely failed validation.",
-                    retryable=True,
-                    entity_id=render.id,
-                    correlation_id=generated.run_id,
-                )
-
-            render.object_key = object_key
-            render.sha256 = stored.sha256
             render.run_id = generated.run_id
             render.parent_run_id = parent_run_id
             render.status = OutfitStatus.PREVIEW_READY.value
             render.provider = generated.provider
             render.model = generated.model
             outfit.status = OutfitStatus.PREVIEW_READY.value
-
-            manifest = self._success_manifest(
-                render=render,
-                outfit=outfit,
-                profile=profile,
-                sources=sources,
-                generated=generated,
-                requested_model=requested_model,
-                correction_hint_supplied=payload.correction_hint is not None,
-                inspection_width=inspection.width,
-                inspection_height=inspection.height,
-                content_type=inspection.content_type,
-                output_size=stored.size,
-            )
-            manifest_key, manifest_hash = await persist_manifest(self.storage, self.keys, manifest)
+            
+            if generated.object_key:
+                # Native Genblaze output (Live Mode)
+                render.object_key = generated.object_key
+                render.sha256 = generated.sha256
+                
+                redacted_manifest = generated.provider_manifest
+                redacted_manifest["qa"] = {
+                    "status": "decoded",
+                    "review_required": False,
+                    "evidence_status": AssetEvidenceStatus.AI_RECONSTRUCTED.value,
+                    "disclosure": _AI_PREVIEW_DISCLOSURE,
+                }
+                import hashlib
+                import json
+                payload = json.dumps(redacted_manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                manifest_hash = hashlib.sha256(payload).hexdigest()
+                manifest_key = f"genblaze/manifests/{generated.run_id}.json"
+            elif generated.content:
+                # Mock mode or legacy fallback
+                inspection = inspect_upload_image(generated.content)
+                object_key = self.keys.look_render(user.id, render.id, 1)
+                stored = await self.storage.put_bytes(
+                    object_key,
+                    generated.content,
+                    content_type=inspection.content_type,
+                    metadata={
+                        "render-id": render.id,
+                        "run-id": generated.run_id,
+                        "profile-id": profile.id,
+                        "outfit-id": outfit.id,
+                        "disclosure": "ai-preview",
+                    },
+                )
+                render.object_key = object_key
+                render.sha256 = stored.sha256
+                
+                manifest = self._success_manifest(
+                    render=render,
+                    outfit=outfit,
+                    profile=profile,
+                    sources=sources,
+                    generated=generated,
+                    requested_model=requested_model,
+                    correction_hint_supplied=payload.correction_hint is not None,
+                    inspection_width=inspection.width,
+                    inspection_height=inspection.height,
+                    content_type=inspection.content_type,
+                    output_size=stored.size,
+                )
+                manifest_key, manifest_hash = await persist_manifest(self.storage, self.keys, manifest)
+                redacted_manifest = manifest.owner_view()
+            else:
+                raise FitCheckError(
+                    "GENERATION_OUTPUT_UNVERIFIABLE",
+                    "The provider did not return verifiable output bytes or an object key.",
+                    retryable=True,
+                    entity_id=render.id,
+                    correlation_id=generated.run_id,
+                )
+            
             session.add(
                 ProvenanceLink(
                     entity_type="tryon_render",
@@ -379,7 +385,7 @@ class MilestoneThreeWorkflow:
                     run_id=generated.run_id,
                     parent_run_id=parent_run_id,
                     privacy_scope="private",
-                    redacted_manifest=manifest.owner_view(),
+                    redacted_manifest=redacted_manifest,
                 )
             )
             await session.commit()
