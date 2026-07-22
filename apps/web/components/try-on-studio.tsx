@@ -12,6 +12,7 @@ import {
   getModelProfiles,
   getOutfitRenders,
   getProvenance,
+  getEventSourceUrl,
   renderOutfit,
   uploadReferencePhoto,
 } from "../lib/api";
@@ -197,6 +198,29 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
       setDeletingProfileId(null);
     }
   }
+
+  const currentRenderId = currentRender?.id;
+  const currentRenderStatus = currentRender?.status;
+  useEffect(() => {
+    if (!currentRenderId || currentRenderStatus !== "preview_generating") return;
+    const sseUrl = getEventSourceUrl(`/v1/outfits/renders/${currentRenderId}/events`);
+    const source = new EventSource(sseUrl);
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.stage === "preview_ready" && outfitId) {
+          source.close();
+          void refreshRenders(outfitId);
+        }
+      } catch {
+        // Safe JSON parse error handling
+      }
+    };
+    source.onerror = () => {
+      source.close();
+    };
+    return () => source.close();
+  }, [currentRenderId, currentRenderStatus, outfitId, refreshRenders]);
 
   async function handleGeneratePreview() {
     if (!outfit || !selectedProfile || selectedProfile.status !== "active") {

@@ -17,6 +17,7 @@ import {
   getDuplicateReviews,
   getGarments,
   getHealth,
+  getEventSourceUrl,
   reviewCutout,
   reviewCandidate,
   seedDemoWardrobe,
@@ -80,6 +81,32 @@ export function WardrobeImport() {
       })
       .catch(() => setCanSeedDemo(false));
   }, []);
+
+  useEffect(() => {
+    if (!importJob?.id || importJob.progress >= 100) return;
+    const sseUrl = getEventSourceUrl(`/v1/imports/${importJob.id}/events`);
+    const source = new EventSource(sseUrl);
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (typeof payload.progress === "number") {
+          setImportJob((prev) =>
+            prev ? { ...prev, progress: payload.progress, status: payload.stage ?? prev.status } : prev
+          );
+        }
+        if (payload.progress >= 100 || payload.stage === "complete" || payload.stage === "awaiting_review") {
+          source.close();
+          void refresh();
+        }
+      } catch {
+        // Safe JSON parse error handling
+      }
+    };
+    source.onerror = () => {
+      source.close();
+    };
+    return () => source.close();
+  }, [importJob?.id, importJob?.progress, refresh]);
 
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

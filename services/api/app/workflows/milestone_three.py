@@ -35,6 +35,7 @@ from app.services.image_processing import inspect_upload_image
 from app.services.object_keys import ObjectKeys
 from app.services.provenance import MediaProvenanceManifest, persist_manifest
 from app.services.storage import ObjectStorage, sha256_bytes
+from app.services.task_queue import JobEvent, broadcaster
 
 _ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _EXTENSIONS_BY_CONTENT_TYPE = {
@@ -259,6 +260,14 @@ class MilestoneThreeWorkflow:
         requested_model: str | None = None
         generated: GeneratedMedia | None = None
         try:
+            broadcaster.publish(
+                JobEvent(
+                    job_id=render.id,
+                    stage="preview_generating",
+                    progress=20,
+                    data={"outfit_id": outfit.id, "profile_id": profile.id},
+                )
+            )
             requested_model = self._configured_tryon_model()
             if self.settings.provider_mode is not ProviderMode.MOCK:
                 raise FitCheckError(
@@ -374,6 +383,14 @@ class MilestoneThreeWorkflow:
                 )
             )
             await session.commit()
+            broadcaster.publish(
+                JobEvent(
+                    job_id=render.id,
+                    stage="preview_ready",
+                    progress=100,
+                    data={"render_id": render.id, "run_id": generated.run_id},
+                )
+            )
             return await self._render_response(session, render, profile=profile, sources=sources)
         except FitCheckError as error:
             await self._record_failed_render(

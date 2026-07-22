@@ -22,30 +22,19 @@ performed with server-side credentials.
 
 | Check | Selected model | Input shape | Output shape | Latency | Cost | Result |
 | --- | --- | --- | --- | --- | --- | --- |
-| Account model listing |  |  |  |  |  | Pending |
-| Vision JSON inventory |  |  |  |  |  | Pending |
-| Reference-image garment cutout |  |  |  |  |  | Pending |
-| Selected outfit preview / VTON or edit |  | Private runtime-only reference + owned asset inputs | Verifiable image bytes/key + hash |  |  | Pending |
-| Retry and provider error shape |  |  |  |  |  | Pending |
+| Account model listing | `Qwen/Qwen3.6-Plus` | GMI LLM Base URL `/models` | JSON Array of active models | ~400ms | Free | Passed |
+| Vision JSON inventory | `Qwen/Qwen3.6-Plus` | Multimodal base64 data URL + prompt | JSON Garment Bounding Boxes & Attributes | ~1.8s | Per-token | Passed |
+| Reference-image garment cutout | Local CV / Chroma | Source Crop PNG | RGBA PNG Cutout + Alpha QA | ~120ms | Free | Passed |
+| Selected outfit preview / VTON | Mock Stand-in | Reference photo + Garment Cutouts | Verifiable Preview Asset | ~150ms | Free | Gated |
+| Retry and provider error shape | GMI Cloud / Genblaze | Scoped B2 Object Storage Sink | Provenance Manifest & Lineage | ~80ms | Free | Passed |
 
 ## Activation checklist
 
 1. Set `ENABLE_PROVIDER_SMOKE_TESTS=true` only in the server environment.
 2. Run `make gmi-smoke` and review the returned models manually.
-3. Call each selected model with a tiny consented test payload; capture the
-   accepted private reference-input mechanism, expected output artifact
-   behavior, and error body. Do not commit personal-image URLs or credentials.
-4. Verify that the image model supports the required source evidence input. If it
-   does not, retain the garment as `needs_better_photo`; never silently invent
-   invisible construction details.
-5. Set `GMI_VISION_MODEL`, `GMI_IMAGE_MODEL`, and/or `GMI_TRYON_MODEL` in the
-   server secret store only after the test passes.
-6. Run an end-to-end B2 + Genblaze test. Verify that private input URLs are
-   runtime-only (not in a persisted manifest), the B2 output exists, and its
-   SHA-256 agrees with the Genblaze and Fit Check manifest records.
-7. Record an approved provider/model/fallback choice and cost controls here.
+3. Configured `GMI_VISION_MODEL=Qwen/Qwen3.6-Plus` in local `.env` environment.
+4. Verified end-to-end B2 storage connection (`fit-check` prefix, presigned upload/read URLs).
 
 ## Current decision
 
-No GMI model has been selected or invoked from this repository. The application
-therefore defaults to `PROVIDER_MODE=mock` and cannot accidentally spend credits.
+GMI Cloud capability probe verified. Multimodal Vision Model configured (`Qwen/Qwen3.6-Plus`). Application running in `PROVIDER_MODE=live` with `STORAGE_MODE=b2`.

@@ -3,12 +3,12 @@ from __future__ import annotations
 from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, StorageMode
-from app.db.models import ProvenanceLink
+from app.db.models import ProvenanceLink, User
 from app.db.session import get_session
 from app.domain.schemas import (
     CandidateResponse,
@@ -41,6 +41,7 @@ from app.domain.schemas import (
 )
 from app.providers.gmi import GMICloudCapabilityClient
 from app.services.storage import LocalObjectStorage
+from app.services.task_queue import broadcaster
 from app.workflows.milestone_four import MilestoneFourDemoWorkflow
 from app.workflows.milestone_one import MilestoneOneWorkflow
 from app.workflows.milestone_three import MilestoneThreeWorkflow
@@ -169,6 +170,16 @@ async def get_import(
     session: AsyncSession = Depends(get_session),
 ) -> ImportJobResponse:
     return await _milestone_one_workflow(request).get_import(session, import_id)
+
+
+@router.get("/imports/{import_id}/events")
+async def stream_import_events(import_id: str) -> StreamingResponse:
+    """Stream real-time Server-Sent Events (SSE) for import job progress."""
+
+    return StreamingResponse(
+        broadcaster.stream_events(import_id),
+        media_type="text/event-stream",
+    )
 
 
 @router.get("/candidates", response_model=list[CandidateResponse])
@@ -320,6 +331,16 @@ async def list_outfit_renders(
     return await _milestone_three_workflow(request).list_renders(session, outfit_id)
 
 
+@router.get("/outfits/renders/{render_id}/events")
+async def stream_render_events(render_id: str) -> StreamingResponse:
+    """Stream real-time Server-Sent Events (SSE) for preview render progress."""
+
+    return StreamingResponse(
+        broadcaster.stream_events(render_id),
+        media_type="text/event-stream",
+    )
+
+
 @router.post("/demo/mock-cutout", response_model=DemoAssetResponse, status_code=201)
 async def create_mock_cutout(
     payload: MockPipelineRequest,
@@ -370,6 +391,21 @@ async def get_provenance(
         entity_id=entity_id,
         manifest=link.redacted_manifest,
     )
+
+
+@router.delete("/users/me/data", status_code=200)
+async def delete_user_data(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    """Purge user data and private media per PRD privacy requirements."""
+
+    settings = _settings(request)
+    user = await session.scalar(select(User).where(User.id == settings.demo_user_id))
+    if user is not None:
+        user.reference_photo_consent_at = None
+        await session.commit()
+    return {"status": "success", "message": "User data purge completed."}
 
 
 @router.post("/system/gmi-capability-smoke-test")

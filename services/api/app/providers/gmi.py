@@ -4,6 +4,7 @@ import asyncio
 import inspect
 import os
 from dataclasses import replace
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -194,11 +195,26 @@ class GenblazeGMICloudOrchestrator:
                 correlation_id=str(getattr(run, "id", "")) or None,
             )
         asset = step.assets[0]
+        content_bytes: bytes | None = getattr(asset, "content", None)
+        if content_bytes is None:
+            if hasattr(asset, "bytes") and asset.bytes:
+                content_bytes = asset.bytes
+            elif hasattr(asset, "url") and asset.url:
+                try:
+                    with httpx.Client(timeout=30) as client:
+                        resp = client.get(asset.url)
+                        if resp.status_code == 200:
+                            content_bytes = resp.content
+                except Exception:
+                    pass
+            elif hasattr(asset, "path") and asset.path and os.path.exists(asset.path):
+                content_bytes = Path(asset.path).read_bytes()
+
         return GeneratedMedia(
             run_id=str(getattr(run, "id", None) or getattr(manifest, "run_id", "")),
             provider="gmicloud",
             model=model,
-            content=None,
+            content=content_bytes,
             content_type=getattr(asset, "content_type", "image/png"),
             source_asset_url=getattr(asset, "url", None),
             provider_manifest=_model_to_dict(manifest),

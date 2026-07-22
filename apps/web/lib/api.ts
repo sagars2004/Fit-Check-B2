@@ -516,6 +516,16 @@ export async function getOutfitRenders(outfitId: string): Promise<TryOnRender[]>
   return requestJson<TryOnRender[]>(`/v1/outfits/${outfitId}/renders`);
 }
 
+export async function purgeUserData(): Promise<{ status: string; message: string }> {
+  return requestJson<{ status: string; message: string }>("/v1/users/me/data", {
+    method: "DELETE",
+  });
+}
+
+export function getEventSourceUrl(path: string): string {
+  return absoluteApiUrl(path);
+}
+
 export function localMockMediaUrl(objectKey: string): string {
   return (
     apiBaseUrl +

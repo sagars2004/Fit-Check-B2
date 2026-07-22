@@ -52,6 +52,8 @@ from app.services.image_processing import (
 from app.services.object_keys import ObjectKeys
 from app.services.provenance import MediaProvenanceManifest, persist_manifest
 from app.services.storage import ObjectStorage, sha256_bytes
+from app.services.task_queue import JobEvent, broadcaster
+from app.services.vision import extract_garments_with_vision
 
 _ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 _EXTENSIONS_BY_CONTENT_TYPE = {
@@ -205,13 +207,25 @@ class MilestoneOneWorkflow:
 
         candidate_ids: list[str] = []
         errors: list[str] = []
-        for upload in resolved_uploads:
+        total_uploads = len(resolved_uploads)
+        for idx, upload in enumerate(resolved_uploads, start=1):
+            broadcaster.publish(
+                JobEvent(
+                    job_id=job.id,
+                    stage=ImportStatus.INVENTORYING.value,
+                    progress=int(10 + (idx / total_uploads) * 70),
+                    data={"upload_id": upload.id, "current": idx, "total": total_uploads},
+                )
+            )
             try:
-                candidate = await self._create_candidate(session, user.id, upload, job.id)
+                candidates = await self._create_candidates_for_upload(
+                    session, user.id, upload, job.id
+                )
+                for candidate in candidates:
+                    candidate_ids.append(candidate.id)
             except FitCheckError as error:
                 errors.append(f"{upload.id}: {error.code}")
                 continue
-            candidate_ids.append(candidate.id)
 
         job.progress = 100
         if candidate_ids:
@@ -224,6 +238,17 @@ class MilestoneOneWorkflow:
             job.error_message = (
                 "; ".join(errors) or "No reviewable garment candidates were created."
             )
+
+        broadcaster.publish(
+            JobEvent(
+                job_id=job.id,
+                stage=job.status,
+                progress=100,
+                data={"candidate_count": len(candidate_ids)},
+                error_code=job.error_code,
+                error_message=job.error_message,
+            )
+        )
         await session.commit()
         return await self.get_import(session, job.id)
 
@@ -757,16 +782,20 @@ class MilestoneOneWorkflow:
             normalized_key=upload.normalized_key,
         )
 
-    async def _create_candidate(
+    async def _create_candidates_for_upload(
         self, session: AsyncSession, user_id: str, upload: Upload, job_id: str
-    ) -> GarmentCandidate:
-        existing = await session.scalar(
-            select(GarmentCandidate).where(
-                GarmentCandidate.upload_id == upload.id,
-                GarmentCandidate.status != GarmentStatus.REJECTED.value,
-            )
+    ) -> list[GarmentCandidate]:
+        existing = list(
+            (
+                await session.scalars(
+                    select(GarmentCandidate).where(
+                        GarmentCandidate.upload_id == upload.id,
+                        GarmentCandidate.status != GarmentStatus.REJECTED.value,
+                    )
+                )
+            ).all()
         )
-        if existing is not None:
+        if existing:
             return existing
         if upload.normalized_key is None or upload.width is None or upload.height is None:
             raise FitCheckError(
@@ -775,6 +804,60 @@ class MilestoneOneWorkflow:
                 entity_id=upload.id,
             )
         normalized = await self.storage.get_bytes(upload.normalized_key)
+        detected_garments = await extract_garments_with_vision(
+            normalized, upload.width, upload.height, self.settings
+        )
+
+        candidates: list[GarmentCandidate] = []
+        if detected_garments:
+            for g in detected_garments:
+                candidate_id = new_id()
+                source_crop_key = self.keys.candidate_source_crop(user_id, upload.id, candidate_id)
+                crop = crop_normalized_image(
+                    normalized,
+                    left=int(g.bbox["left"]),
+                    top=int(g.bbox["top"]),
+                    right=int(g.bbox["right"]),
+                    bottom=int(g.bbox["bottom"]),
+                )
+                crop_stored = await self.storage.put_bytes(
+                    source_crop_key,
+                    crop,
+                    content_type="image/jpeg",
+                    metadata={
+                        "upload-id": upload.id,
+                        "candidate-id": candidate_id,
+                        "role": "source-crop",
+                    },
+                )
+                candidate = GarmentCandidate(
+                    id=candidate_id,
+                    upload_id=upload.id,
+                    import_job_id=job_id,
+                    bbox=g.bbox,
+                    attributes={
+                        "name_suggestion": g.name_suggestion,
+                        "category": g.category,
+                        "colors": g.colors,
+                        "tags": [],
+                        "apparent_material": g.apparent_material,
+                        "pattern": g.pattern,
+                        "source_crop_sha256": crop_stored.sha256,
+                        "source_fingerprint": perceptual_input_fingerprint(crop),
+                    },
+                    unresolved_details=g.unresolved_details or [
+                        "Confirm the garment boundary before creating a catalog cutout."
+                    ],
+                    confidence=g.confidence,
+                    status="awaiting_review",
+                    source_crop_key=source_crop_key,
+                )
+                session.add(candidate)
+                candidates.append(candidate)
+            await session.flush()
+            return candidates
+
+        # Fallback single full-bounding-box candidate
         candidate_id = new_id()
         source_crop_key = self.keys.candidate_source_crop(user_id, upload.id, candidate_id)
         crop = crop_normalized_image(
@@ -821,7 +904,7 @@ class MilestoneOneWorkflow:
         )
         session.add(candidate)
         await session.flush()
-        return candidate
+        return [candidate]
 
     async def _candidate_response(self, candidate: GarmentCandidate) -> CandidateResponse:
         crop_url = (
