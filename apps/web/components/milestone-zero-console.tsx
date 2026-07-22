@@ -60,9 +60,9 @@ export function MilestoneZeroConsole() {
     <section
       aria-busy={healthState === "loading" || runState === "loading"}
       aria-labelledby="m0-heading"
-      className="console-card"
+      className="provenance-lab"
     >
-      <div className="console-heading">
+      <div className="section-heading">
         <div>
           <p className="eyebrow">Milestone 0 · durable media proof</p>
           <h2 id="m0-heading">Trace one asset from generation to manifest.</h2>
@@ -76,7 +76,7 @@ export function MilestoneZeroConsole() {
         </span>
       </div>
 
-      <p className="console-copy">
+      <p className="workbench-copy">
         This offline run makes a clearly labeled AI-reconstructed demo cutout, validates its alpha
         channel locally, writes it to local storage or B2, and persists a hash-verified provenance
         manifest. It never claims to be a source-backed wardrobe item.
@@ -112,9 +112,9 @@ export function MilestoneZeroConsole() {
       ) : null}
 
       {asset ? (
-        <div className="artifact-result">
+        <div className="demo-seed-result">
           <div className="asset-preview">
-            <div className="checkerboard">
+            <div className="cutout-image">
               {/* Local/B2 private media uses a scoped URL; do not proxy personal wardrobe images through a public optimizer. */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img

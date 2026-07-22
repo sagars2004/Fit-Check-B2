@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
   type OutfitItem,
@@ -26,6 +26,7 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
   const [recommendation, setRecommendation] = useState<OutfitRecommendation | null>(null);
   const [isPlanning, setIsPlanning] = useState(false);
   const [activeAction, setActiveAction] = useState<ActiveAction>(null);
+  const [viewingOutfitId, setViewingOutfitId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,6 +34,14 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
     if (!recommendation) return null;
     return recommendation.weather.source === "open_meteo" ? "Live Open-Meteo" : "Local demo forecast";
   }, [recommendation]);
+  useEffect(() => {
+    if (viewingOutfitId) {
+      document.body.classList.add("viewer-open");
+    } else {
+      document.body.classList.remove("viewer-open");
+    }
+    return () => document.body.classList.remove("viewer-open");
+  }, [viewingOutfitId]);
 
   async function handlePlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -191,15 +200,24 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
               <OutfitCard
                 activeAction={activeAction}
                 key={outfit.id}
-                onPreview={onPreviewOutfit}
-                onSave={handleSave}
-                onWear={handleWear}
                 outfit={outfit}
-                previewSelected={selectedPreviewOutfitId === outfit.id}
                 rank={index + 1}
+                onView={() => setViewingOutfitId(outfit.id)}
               />
             ))}
           </div>
+
+          {viewingOutfitId && (
+            <OutfitViewer
+              activeAction={activeAction}
+              onClose={() => setViewingOutfitId(null)}
+              onPreview={onPreviewOutfit}
+              onSave={handleSave}
+              onWear={handleWear}
+              outfit={recommendation.options.find((o) => o.id === viewingOutfitId)!}
+              previewSelected={selectedPreviewOutfitId === viewingOutfitId}
+            />
+          )}
         </>
       ) : (
         <p className="empty-state" role="status">
@@ -213,59 +231,94 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
 
 function OutfitCard({
   activeAction,
-  onPreview,
-  onSave,
-  onWear,
   outfit,
-  previewSelected,
   rank,
+  onView,
 }: {
   activeAction: ActiveAction;
-  onPreview?: (outfit: OutfitPlan) => void;
-  onSave: (outfitId: string) => Promise<void>;
-  onWear: (outfit: OutfitPlan, action: "wear" | "undo") => Promise<void>;
   outfit: OutfitPlan;
-  previewSelected: boolean;
   rank: number;
+  onView: () => void;
 }) {
   const saving = activeAction?.outfitId === outfit.id;
   return (
-    <article className="outfit-card">
+    <article className="outfit-card" onClick={onView}>
       <div className="outfit-card-meta">
         <span className="review-badge">Option {rank}</span>
         <span>{Math.round(outfit.score)} suitability</span>
       </div>
       <h4>{outfit.title}</h4>
       <p className="outfit-reasoning">{outfit.reasoning}</p>
-      <div className="outfit-items" aria-label={`Garments in ${outfit.title}`}>
-        {outfit.items.map((item) => <OutfitItemTile item={item} key={`${outfit.id}-${item.garment_id}`} />)}
-      </div>
-      <p className="outfit-disclosure">Approved owned garments only · no try-on image has been generated.</p>
-      <div className="review-actions">
-        <button disabled={saving || outfit.status === "saved" || outfit.status === "worn"} onClick={() => void onSave(outfit.id)} type="button">
-          {saving && activeAction?.kind === "save" ? "Saving…" : outfit.status === "saved" || outfit.status === "worn" ? "Saved" : "Save"}
-        </button>
-        {outfit.status === "worn" ? (
-          <button disabled={saving} onClick={() => void onWear(outfit, "undo")} type="button">
-            {saving && activeAction?.kind === "undo" ? "Reversing…" : "Undo wear"}
-          </button>
-        ) : (
-          <button className="approve-button" disabled={saving} onClick={() => void onWear(outfit, "wear")} type="button">
-            {saving && activeAction?.kind === "wear" ? "Logging…" : "Wear it"}
-          </button>
-        )}
-        {onPreview ? (
-          <button
-            aria-pressed={previewSelected}
-            className={previewSelected ? "preview-button preview-button-selected" : "preview-button"}
-            onClick={() => onPreview(outfit)}
-            type="button"
-          >
-            {previewSelected ? "Selected for preview" : "Preview on me"}
-          </button>
-        ) : null}
-      </div>
     </article>
+  );
+}
+
+function OutfitViewer({
+  activeAction,
+  onClose,
+  onPreview,
+  onSave,
+  onWear,
+  outfit,
+  previewSelected,
+}: {
+  activeAction: ActiveAction;
+  onClose: () => void;
+  onPreview?: (outfit: OutfitPlan) => void;
+  onSave: (outfitId: string) => Promise<void>;
+  onWear: (outfit: OutfitPlan, action: "wear" | "undo") => Promise<void>;
+  outfit: OutfitPlan;
+  previewSelected: boolean;
+}) {
+  const saving = activeAction?.outfitId === outfit.id;
+
+  return (
+    <div className="viewer-overlay" onClick={onClose}>
+      <div className="viewer-entry">
+        <div className="viewer" onClick={(e) => e.stopPropagation()}>
+          <button className="viewer-close" onClick={onClose} aria-label="Close viewer" type="button">×</button>
+          
+          <div className="viewer-header">
+            <h3>{outfit.title}</h3>
+            <p className="outfit-reasoning">{outfit.reasoning}</p>
+          </div>
+
+          <div className="outfit-items" aria-label={`Garments in ${outfit.title}`}>
+            {outfit.items.map((item) => <OutfitItemTile item={item} key={`${outfit.id}-${item.garment_id}`} />)}
+          </div>
+
+          <p className="outfit-disclosure">Approved owned garments only · no try-on image has been generated.</p>
+          
+          <div className="review-actions" style={{ marginTop: "24px" }}>
+            <button disabled={saving || outfit.status === "saved" || outfit.status === "worn"} onClick={() => void onSave(outfit.id)} type="button">
+              {saving && activeAction?.kind === "save" ? "Saving…" : outfit.status === "saved" || outfit.status === "worn" ? "Saved" : "Save"}
+            </button>
+            {outfit.status === "worn" ? (
+              <button disabled={saving} onClick={() => void onWear(outfit, "undo")} type="button">
+                {saving && activeAction?.kind === "undo" ? "Reversing…" : "Undo wear"}
+              </button>
+            ) : (
+              <button className="approve-button" disabled={saving} onClick={() => void onWear(outfit, "wear")} type="button">
+                {saving && activeAction?.kind === "wear" ? "Logging…" : "Wear it"}
+              </button>
+            )}
+            {onPreview ? (
+              <button
+                aria-pressed={previewSelected}
+                className={previewSelected ? "preview-button preview-button-selected" : "preview-button"}
+                onClick={() => {
+                  onPreview(outfit);
+                  onClose();
+                }}
+                type="button"
+              >
+                {previewSelected ? "Selected for preview" : "Preview on me"}
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

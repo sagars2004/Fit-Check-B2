@@ -41,6 +41,7 @@ export function WardrobeImport() {
   const [activeGarment, setActiveGarment] = useState<string | null>(null);
   const [activeCutout, setActiveCutout] = useState<string | null>(null);
   const [activeDuplicateReview, setActiveDuplicateReview] = useState<string | null>(null);
+  const [viewingGarmentId, setViewingGarmentId] = useState<string | null>(null);
   const [canSeedDemo, setCanSeedDemo] = useState(false);
   const [isSeedingDemo, setIsSeedingDemo] = useState(false);
   const [demoSeed, setDemoSeed] = useState<DemoWardrobeSeed | null>(null);
@@ -70,6 +71,15 @@ export function WardrobeImport() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (viewingGarmentId) {
+      document.body.classList.add("viewer-open");
+    } else {
+      document.body.classList.remove("viewer-open");
+    }
+    return () => document.body.classList.remove("viewer-open");
+  }, [viewingGarmentId]);
 
   useEffect(() => {
     void getHealth()
@@ -418,9 +428,22 @@ export function WardrobeImport() {
             onGenerateCutout={handleGenerateCutout}
             onReviewCutout={handleCutoutReview}
             onUpdate={handleGarmentUpdate}
+            onView={() => setViewingGarmentId(garment.id)}
           />
         ))}
       </div>
+
+      {viewingGarmentId && (
+        <GarmentViewer
+          garment={garments.find((g) => g.id === viewingGarmentId)!}
+          onClose={() => setViewingGarmentId(null)}
+          isSaving={activeGarment === viewingGarmentId}
+          isCutoutSaving={activeCutout === viewingGarmentId || garments.find((g) => g.id === viewingGarmentId)?.cutouts.some((asset) => asset.id === activeCutout) || false}
+          onUpdate={handleGarmentUpdate}
+          onGenerateCutout={handleGenerateCutout}
+          onReviewCutout={handleCutoutReview}
+        />
+      )}
 
       <DuplicateReviewQueue
         isSaving={activeDuplicateReview}
@@ -540,8 +563,53 @@ function GarmentCard({
   onGenerateCutout,
   onReviewCutout,
   onUpdate,
+  onView,
 }: {
   garment: Garment;
+  isSaving: boolean;
+  isCutoutSaving: boolean;
+  onGenerateCutout: (garmentId: string) => Promise<void>;
+  onReviewCutout: (garmentId: string, assetId: string, action: "approve" | "reject") => Promise<void>;
+  onUpdate: (garmentId: string, update: GarmentUpdate) => Promise<void>;
+  onView: () => void;
+}) {
+  const latestCutout = garment.cutouts[0] ?? null;
+  const hasApprovedCutout = garment.cutouts.some((asset) => asset.qa_status === "approved");
+
+  return (
+    <article className="garment-card">
+      <button className="cutout-image" onClick={onView} type="button">
+        {latestCutout?.asset_url && latestCutout.qa_status !== "failed" ? (
+          <img alt={`Source-linked cutout candidate for ${garment.name}`} src={latestCutout.asset_url} />
+        ) : garment.source_crop_url ? (
+          <img alt={`Approved source crop for ${garment.name}`} src={garment.source_crop_url} />
+        ) : (
+          <span>Source crop unavailable</span>
+        )}
+      </button>
+      <div className="card-body">
+        <div className="card-meta">
+          <span className="evidence-badge">{evidenceLabel(garment.evidence_status)}</span>
+          <span>{garment.category}</span>
+        </div>
+        <h4>{garment.name}</h4>
+        <p className="tag-line">{garment.colors.join(" · ") || "Color under review"}{garment.tags.length ? ` · ${garment.tags.join(" · ")}` : ""}</p>
+      </div>
+    </article>
+  );
+}
+
+function GarmentViewer({
+  garment,
+  onClose,
+  isSaving,
+  isCutoutSaving,
+  onGenerateCutout,
+  onReviewCutout,
+  onUpdate,
+}: {
+  garment: Garment;
+  onClose: () => void;
   isSaving: boolean;
   isCutoutSaving: boolean;
   onGenerateCutout: (garmentId: string) => Promise<void>;
@@ -556,66 +624,73 @@ function GarmentCard({
   const hasApprovedCutout = garment.cutouts.some((asset) => asset.qa_status === "approved");
 
   return (
-    <article className="garment-card">
-      {latestCutout?.asset_url && latestCutout.qa_status !== "failed" ? (
-        <CutoutImage
-          alt={`Source-linked cutout candidate for ${garment.name}`}
-          src={latestCutout.asset_url}
-        />
-      ) : (
-        <SourceImage alt={`Approved source crop for ${garment.name}`} src={garment.source_crop_url} />
-      )}
-      <div className="card-body">
-        <div className="card-meta">
-          <span className="evidence-badge">{evidenceLabel(garment.evidence_status)}</span>
-          <span>{garment.category}</span>
+    <div className="viewer-overlay" onClick={onClose}>
+      <div className="viewer-entry">
+        <div className="viewer" onClick={(e) => e.stopPropagation()}>
+          <button className="viewer-close" onClick={onClose} aria-label="Close viewer" type="button">×</button>
+          
+          <div className="viewer-header">
+            <h3>{garment.name}</h3>
+            <p className="tag-line">{garment.colors.join(" · ")}</p>
+          </div>
+
+          <div className="viewer-image">
+            {latestCutout?.asset_url && latestCutout.qa_status !== "failed" ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img alt={`Cutout for ${garment.name}`} src={latestCutout.asset_url} />
+            ) : garment.source_crop_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img alt={`Source crop for ${garment.name}`} src={garment.source_crop_url} />
+            ) : null}
+          </div>
+
+          <p className="source-disclosure">
+            {garment.evidence_status === "verified_source_backed"
+              ? "Approved from source evidence. Metadata edits do not change the photo or provenance."
+              : garment.evidence_status === "ai_reconstructed"
+                ? "AI-reconstructed asset — human review is still required."
+                : "This item needs a clearer photo before it can be trusted as inventory."}
+          </p>
+
+          <CutoutReviewPanel
+            garment={garment}
+            hasApprovedCutout={hasApprovedCutout}
+            isSaving={isCutoutSaving}
+            latestCutout={latestCutout}
+            onGenerate={onGenerateCutout}
+            onReview={onReviewCutout}
+          />
+          
+          <div className="metadata-editor">
+            <h4>Edit closet metadata</h4>
+            <div className="review-fields">
+              <label>Name<input onChange={(event) => setName(event.target.value)} value={name} /></label>
+              <label>Category<input onChange={(event) => setCategory(event.target.value)} value={category} /></label>
+              <label>Tags<input onChange={(event) => setTags(event.target.value)} value={tags} /></label>
+              <label>Price<input inputMode="decimal" onChange={(event) => setPrice(event.target.value)} placeholder="Optional" value={price} /></label>
+            </div>
+            <div className="review-actions">
+              <button
+                className="approve-button"
+                disabled={isSaving}
+                onClick={() => void onUpdate(garment.id, {
+                  name: name.trim(),
+                  category: category.trim(),
+                  tags: splitList(tags),
+                  ...(price.trim() ? { price: Number(price) } : {}),
+                })}
+                type="button"
+              >
+                Save metadata
+              </button>
+              <button className="quiet-danger" disabled={isSaving} onClick={() => void onUpdate(garment.id, { archive: true })} type="button">
+                Archive
+              </button>
+            </div>
+          </div>
         </div>
-        <h4>{garment.name}</h4>
-        <p className="tag-line">{garment.colors.join(" · ") || "Color under review"}{garment.tags.length ? ` · ${garment.tags.join(" · ")}` : ""}</p>
-        <p className="source-disclosure">
-          {garment.evidence_status === "verified_source_backed"
-            ? "Approved from source evidence. Metadata edits do not change the photo or provenance."
-            : garment.evidence_status === "ai_reconstructed"
-              ? "AI-reconstructed asset — human review is still required."
-              : "This item needs a clearer photo before it can be trusted as inventory."}
-        </p>
-        <CutoutReviewPanel
-          garment={garment}
-          hasApprovedCutout={hasApprovedCutout}
-          isSaving={isCutoutSaving}
-          latestCutout={latestCutout}
-          onGenerate={onGenerateCutout}
-          onReview={onReviewCutout}
-        />
-        <details className="metadata-editor">
-          <summary>Edit closet metadata</summary>
-          <div className="review-fields">
-            <label>Name<input onChange={(event) => setName(event.target.value)} value={name} /></label>
-            <label>Category<input onChange={(event) => setCategory(event.target.value)} value={category} /></label>
-            <label>Tags<input onChange={(event) => setTags(event.target.value)} value={tags} /></label>
-            <label>Price<input inputMode="decimal" onChange={(event) => setPrice(event.target.value)} placeholder="Optional" value={price} /></label>
-          </div>
-          <div className="review-actions">
-            <button
-              className="approve-button"
-              disabled={isSaving}
-              onClick={() => void onUpdate(garment.id, {
-                name: name.trim(),
-                category: category.trim(),
-                tags: splitList(tags),
-                ...(price.trim() ? { price: Number(price) } : {}),
-              })}
-              type="button"
-            >
-              Save metadata
-            </button>
-            <button disabled={isSaving} onClick={() => void onUpdate(garment.id, { archive: true })} type="button">
-              Archive
-            </button>
-          </div>
-        </details>
       </div>
-    </article>
+    </div>
   );
 }
 
