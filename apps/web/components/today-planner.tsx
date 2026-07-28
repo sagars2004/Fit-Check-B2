@@ -19,9 +19,9 @@ type TodayPlannerProps = {
 };
 
 export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }: TodayPlannerProps) {
-  const [location, setLocation] = useState("New York, NY");
+  const [location, setLocation] = useState("");
   const [forecastDate, setForecastDate] = useState(todayIso());
-  const [occasion, setOccasion] = useState("Rainy workday");
+  const [occasion, setOccasion] = useState("");
   const [utilizationMode, setUtilizationMode] = useState(false);
   const [recommendation, setRecommendation] = useState<OutfitRecommendation | null>(null);
   const [isPlanning, setIsPlanning] = useState(false);
@@ -30,10 +30,6 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const weatherSourceLabel = useMemo(() => {
-    if (!recommendation) return null;
-    return recommendation.weather.source === "open_meteo" ? "Live Open-Meteo" : "Local demo forecast";
-  }, [recommendation]);
   useEffect(() => {
     if (viewingOutfitId) {
       document.body.classList.add("viewer-open");
@@ -132,7 +128,7 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
       <form className="today-context" onSubmit={(event) => void handlePlan(event)}>
         <label>
           Location
-          <input onChange={(event) => setLocation(event.target.value)} placeholder="New York, NY" value={location} />
+          <input onChange={(event) => setLocation(event.target.value)} placeholder="e.g. New York, NY" value={location} />
         </label>
         <label>
           Date
@@ -142,7 +138,7 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
           Occasion or context
           <input
             onChange={(event) => setOccasion(event.target.value)}
-            placeholder="Rainy commute, dinner after work"
+            placeholder="e.g. Rainy commute, dinner after work"
             value={occasion}
           />
         </label>
@@ -169,7 +165,7 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
         <>
           <section className="forecast-card" aria-label="Forecast context">
             <div>
-              <p className="eyebrow">Forecast · {weatherSourceLabel}</p>
+              <p className="eyebrow">Forecast</p>
               <h3>{recommendation.weather.location}</h3>
               <p>{formatDate(recommendation.weather.forecast_date)} · {recommendation.weather.condition}</p>
             </div>

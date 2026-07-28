@@ -1,0 +1,26 @@
+[
+    {
+        "corsRuleName": "allowAnyOrigin",
+        "allowedOrigins": [
+            "*"
+        ],
+        "allowedHeaders": [
+            "*"
+        ],
+        "allowedOperations": [
+            "b2_download_file_by_id",
+            "b2_download_file_by_name",
+            "b2_upload_file",
+            "b2_upload_part",
+            "s3_put",
+            "s3_post",
+            "s3_delete",
+            "s3_get",
+            "s3_head"
+        ],
+        "exposeHeaders": [
+            "ETag"
+        ],
+        "maxAgeSeconds": 3600
+    }
+]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, BackgroundTasks
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,7 +41,7 @@ from app.domain.schemas import (
 )
 from app.providers.gmi import GMICloudCapabilityClient
 from app.services.storage import LocalObjectStorage
-from app.services.task_queue import broadcaster
+from app.services.task_queue import JobEvent, broadcaster
 from app.workflows.milestone_four import MilestoneFourDemoWorkflow
 from app.workflows.milestone_one import MilestoneOneWorkflow
 from app.workflows.milestone_three import MilestoneThreeWorkflow
@@ -160,9 +160,12 @@ async def delete_model_profile(
 async def create_import(
     payload: ImportCreateRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ) -> ImportJobResponse:
-    return await _milestone_one_workflow(request).create_import(session, payload.upload_ids)
+    return await _milestone_one_workflow(request).create_import(
+        session, payload.upload_ids, background_tasks, request.app.state.database
+    )
 
 
 @router.get("/imports/{import_id}", response_model=ImportJobResponse)
@@ -175,11 +178,44 @@ async def get_import(
 
 
 @router.get("/imports/{import_id}/events")
-async def stream_import_events(import_id: str) -> StreamingResponse:
+async def stream_import_events(
+    import_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session)
+) -> StreamingResponse:
     """Stream real-time Server-Sent Events (SSE) for import job progress."""
 
+    async def event_generator():
+        from app.core.errors import FitCheckError
+        try:
+            job = await _milestone_one_workflow(request).get_import(session, import_id)
+            if job.progress >= 100 or job.status in ("complete", "failed", "awaiting_review"):
+                yield JobEvent(
+                    job_id=job.id,
+                    stage=job.status,
+                    progress=100,
+                    data={
+                        "candidate_ids": job.candidate_ids,
+                        "error_code": job.error_code,
+                        "error_message": job.error_message,
+                    },
+                ).to_sse()
+                return
+        except FitCheckError as e:
+            yield JobEvent(
+                job_id=import_id,
+                stage="failed",
+                progress=100,
+                error_code=e.code,
+                error_message=e.message,
+            ).to_sse()
+            return
+
+        async for event in broadcaster.stream_events(import_id):
+            yield event
+
     return StreamingResponse(
-        broadcaster.stream_events(import_id),
+        event_generator(),
         media_type="text/event-stream",
     )
 

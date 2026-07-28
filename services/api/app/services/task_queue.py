@@ -65,7 +65,7 @@ class EventBroadcaster:
             yield f"data: {json.dumps({'status': 'connected', 'job_id': job_id})}\n\n"
             while True:
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    event = await asyncio.wait_for(queue.get(), timeout=5.0)
                     yield event.to_sse()
                     if event.progress >= 100 or event.stage in ("complete", "failed"):
                         break

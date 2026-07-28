@@ -46,13 +46,14 @@ async def extract_garments_with_vision(
 
     prompt = (
         "Analyze this clothing photo for a digital wardrobe application. "
-        "Identify all distinct garments worn or shown "
+        "Carefully identify all distinct garments worn or shown "
         "(tops, bottoms, outerwear, footwear, dresses, accessories). "
+        "Focus on accurate classification of the clothing type and precise color extraction. "
         "Return ONLY a JSON object with key 'garments' containing an array of objects. "
         "Each object must have:\n"
-        "- name_suggestion: string (e.g. 'Navy Blue Wool Coat')\n"
+        "- name_suggestion: string (Be highly descriptive of the exact type, e.g. 'Slim-Fit Denim Jeans' instead of 'pants')\n"
         "- category: string ('top', 'bottom', 'outerwear', 'footwear', 'dress', 'accessory')\n"
-        "- colors: array of strings\n"
+        "- colors: array of strings (Extract the exact primary and secondary colors as they appear in the photo)\n"
         "- bbox: object with keys 'left', 'top', 'right', 'bottom' in pixel coordinates "
         "(0 to width, 0 to height)\n"
         "- apparent_material: string\n"
@@ -78,9 +79,10 @@ async def extract_garments_with_vision(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with httpx.AsyncClient(timeout=60) as client:
             resp = await client.post(endpoint, headers=headers, json=body)
             if resp.status_code != 200:
+                print(f"GMI Vision API Error {resp.status_code}: {resp.text}")
                 return []
             res_data = resp.json()
             content = res_data["choices"][0]["message"]["content"]
@@ -120,5 +122,8 @@ async def extract_garments_with_vision(
                     )
                 )
             return results
-    except Exception:
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"GMI Vision API Exception: {e}")
         return []

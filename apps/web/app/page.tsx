@@ -4,10 +4,9 @@ import { useState } from "react";
 import { WardrobeImport } from "../components/wardrobe-import";
 import { TodayPlanner } from "../components/today-planner";
 import { TodayAndPreview } from "../components/today-and-preview";
-import { MilestoneZeroConsole } from "../components/milestone-zero-console";
 
 export default function AppHome() {
-  const [activeTab, setActiveTab] = useState<"planner" | "wardrobe" | "preview" | "zero">("wardrobe");
+  const [activeTab, setActiveTab] = useState<"planner" | "wardrobe" | "preview">("wardrobe");
 
   return (
     <>
@@ -35,12 +34,6 @@ export default function AppHome() {
               className={activeTab === "preview" ? "active" : ""}
             >
               Try-On Studio
-            </button>
-            <button 
-              onClick={() => setActiveTab("zero")}
-              className={activeTab === "zero" ? "active" : ""}
-            >
-              Provenance Lab
             </button>
           </div>
           <div className="nav-stage">
@@ -87,20 +80,6 @@ export default function AppHome() {
               </div>
             </header>
             <TodayAndPreview />
-          </section>
-        )}
-
-        {activeTab === "zero" && (
-          <section className="provenance-lab">
-            <header className="section-heading">
-              <div>
-                <h2>Provenance Lab</h2>
-                <p className="workbench-copy">
-                  Under the hood look at media authenticity and metadata.
-                </p>
-              </div>
-            </header>
-            <MilestoneZeroConsole />
           </section>
         )}
       </main>

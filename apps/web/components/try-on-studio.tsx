@@ -131,6 +131,7 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
 
   async function handleReferenceUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
     if (!referenceFile) {
       setError("Choose a JPG, PNG, or WebP reference photo first.");
       return;
@@ -149,7 +150,7 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
       setSelectedProfileId(profile.id);
       setReferenceFile(null);
       setHasConsent(false);
-      event.currentTarget.reset();
+      form.reset();
       setNotice("Reference photo saved privately. Select it only for the look you want to preview.");
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "This reference photo could not be saved securely.");

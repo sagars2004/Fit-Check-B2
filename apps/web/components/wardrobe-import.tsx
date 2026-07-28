@@ -20,7 +20,6 @@ import {
   getEventSourceUrl,
   reviewCutout,
   reviewCandidate,
-  seedDemoWardrobe,
   updateGarment,
   uploadPhotos,
 } from "../lib/api";
@@ -42,9 +41,6 @@ export function WardrobeImport() {
   const [activeCutout, setActiveCutout] = useState<string | null>(null);
   const [activeDuplicateReview, setActiveDuplicateReview] = useState<string | null>(null);
   const [viewingGarmentId, setViewingGarmentId] = useState<string | null>(null);
-  const [canSeedDemo, setCanSeedDemo] = useState(false);
-  const [isSeedingDemo, setIsSeedingDemo] = useState(false);
-  const [demoSeed, setDemoSeed] = useState<DemoWardrobeSeed | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
@@ -82,14 +78,7 @@ export function WardrobeImport() {
   }, [viewingGarmentId]);
 
   useEffect(() => {
-    void getHealth()
-      .then((health) => {
-        // The seed endpoint is intentionally local-mock-only. Keep this affordance
-        // absent for B2-backed or live-provider configurations rather than relying
-        // on a rejected request to protect a real wardrobe.
-        setCanSeedDemo(health.provider_mode === "mock" && health.storage_mode === "local");
-      })
-      .catch(() => setCanSeedDemo(false));
+    // Component mounted
   }, []);
 
   useEffect(() => {
@@ -112,11 +101,11 @@ export function WardrobeImport() {
         // Safe JSON parse error handling
       }
     };
-    source.onerror = () => {
-      source.close();
+    source.onerror = (err) => {
+      console.error("EventSource failed:", err);
     };
     return () => source.close();
-  }, [importJob?.id, importJob?.progress, refresh]);
+  }, [importJob?.id, refresh]);
 
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -149,30 +138,6 @@ export function WardrobeImport() {
     }
   }
 
-  async function handleSeedDemo() {
-    setIsSeedingDemo(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const seeded = await seedDemoWardrobe();
-      setDemoSeed(seeded);
-      await refresh();
-      setNotice(
-        seeded.created
-          ? `Safe demo wardrobe loaded with ${seeded.approved_garment_count} approved items.`
-          : `Safe demo wardrobe is already ready with ${seeded.approved_garment_count} approved items.`,
-      );
-    } catch (caught: unknown) {
-      setError(
-        caught instanceof Error
-          ? caught.message
-          : "The safe demo wardrobe could not be loaded. Your existing closet was not changed.",
-      );
-    } finally {
-      setIsSeedingDemo(false);
-    }
-  }
-
   async function handleReview(candidateId: string, review: CandidateReview) {
     setActiveCandidate(candidateId);
     setError(null);
@@ -194,6 +159,9 @@ export function WardrobeImport() {
     try {
       const updated = await updateGarment(garmentId, update);
       setNotice(`Updated ${updated.name}; its source evidence was left unchanged.`);
+      if (update.status === "archived" && viewingGarmentId === garmentId) {
+        setViewingGarmentId(null);
+      }
       await refresh();
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "That garment update could not be saved.");
@@ -275,7 +243,7 @@ export function WardrobeImport() {
 
   return (
     <section
-      aria-busy={loadState === "loading" || uploading || isSeedingDemo}
+      aria-busy={loadState === "loading" || uploading}
       aria-labelledby="wardrobe-heading"
       className="wardrobe-workbench"
       id="closet"
@@ -299,42 +267,7 @@ export function WardrobeImport() {
         similar clothes.
       </p>
 
-      {canSeedDemo ? (
-        <section className="demo-seed-panel" aria-labelledby="demo-seed-heading">
-          <div>
-            <p className="eyebrow">Quick demo · local mock mode</p>
-            <h3 id="demo-seed-heading">Need a safe wardrobe to review?</h3>
-            <p>
-              Load an idempotent sample closet with approved source-backed garments and one item
-              held for a better photo. It uses no cloud credentials and never creates a reference photo.
-            </p>
-          </div>
-          <button
-            className="secondary-button"
-            disabled={isSeedingDemo}
-            onClick={() => void handleSeedDemo()}
-            type="button"
-          >
-            {isSeedingDemo ? "Loading safe demo…" : "Load safe demo wardrobe"}
-          </button>
-        </section>
-      ) : null}
 
-      {demoSeed ? (
-        <section className="demo-seed-result" aria-labelledby="demo-seed-result-heading">
-          <div>
-            <p className="eyebrow">Demo wardrobe ready</p>
-            <h3 id="demo-seed-result-heading">
-              {demoSeed.approved_garment_count} approved owned item{demoSeed.approved_garment_count === 1 ? "" : "s"} are ready to plan.
-            </h3>
-            <p>
-              {demoSeed.disclosure} One seeded item remains held for a better photo and is excluded from recommendations.
-            </p>
-            <p className="demo-seed-note">{demoSeed.reference_photo_requirement}</p>
-          </div>
-          <a className="primary-link" href="#today">Continue to Today</a>
-        </section>
-      ) : null}
 
       <form className="upload-panel" onSubmit={(event) => void handleUpload(event)}>
         <label className="drop-zone" htmlFor="outfit-photos">
@@ -386,11 +319,11 @@ export function WardrobeImport() {
       </div>
 
       {loadState === "loading" ? <p className="empty-state">Loading local review records…</p> : null}
-      {loadState === "ready" && candidates.length === 0 ? (
+      {loadState === "ready" && candidates.filter((c) => c.status === "awaiting_review").length === 0 ? (
         <p className="empty-state">Your first source crop will appear here after import.</p>
       ) : null}
       <div className="candidate-grid">
-        {candidates.map((candidate) => (
+        {candidates.filter((candidate) => candidate.status === "awaiting_review").map((candidate) => (
           <CandidateCard
             candidate={candidate}
             isSaving={activeCandidate === candidate.id}
@@ -433,7 +366,7 @@ export function WardrobeImport() {
         ))}
       </div>
 
-      {viewingGarmentId && (
+      {viewingGarmentId && garments.find((g) => g.id === viewingGarmentId) && (
         <GarmentViewer
           garment={garments.find((g) => g.id === viewingGarmentId)!}
           onClose={() => setViewingGarmentId(null)}

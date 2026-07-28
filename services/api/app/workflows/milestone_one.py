@@ -7,6 +7,9 @@ from typing import Any, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import BackgroundTasks
+
+from app.db.session import Database
 
 from app.core.config import ProviderMode, Settings, StorageMode
 from app.core.errors import FitCheckError
@@ -156,7 +159,7 @@ class MilestoneOneWorkflow:
         return await self._finalize_upload(session, upload_id, content, persist_original=True)
 
     async def create_import(
-        self, session: AsyncSession, upload_ids: list[str]
+        self, session: AsyncSession, upload_ids: list[str], background_tasks: BackgroundTasks, database: Database
     ) -> ImportJobResponse:
         user = await self._ensure_demo_user(session)
         resolved_uploads: list[Upload] = []
@@ -210,54 +213,84 @@ class MilestoneOneWorkflow:
             progress=10,
         )
         session.add(job)
-        await session.flush()
+        await session.commit()
 
-        candidate_ids: list[str] = []
-        errors: list[str] = []
-        total_uploads = len(resolved_uploads)
-        for idx, upload in enumerate(resolved_uploads, start=1):
+        background_tasks.add_task(
+            self._process_import_job, database, job.id, [u.id for u in resolved_uploads]
+        )
+
+        return ImportJobResponse(
+            id=job.id,
+            status=job.status,
+            progress=job.progress,
+            upload_ids=upload_ids,
+            candidate_ids=[],
+            candidate_count=0,
+            error_code=None,
+            error_message=None,
+            stages=[],
+        )
+
+    async def _process_import_job(self, database: Database, job_id: str, upload_ids: list[str]) -> None:
+        async with database.session() as session:
+            job = await session.scalar(select(ImportJob).where(ImportJob.id == job_id))
+            if not job:
+                return
+            user = await self._ensure_demo_user(session)
+            
+            resolved_uploads = []
+            for uid in upload_ids:
+                upload = await self._load_owned_upload(session, user.id, uid)
+                resolved_uploads.append(upload)
+
+            candidate_ids: list[str] = []
+            errors: list[str] = []
+            total_uploads = len(resolved_uploads)
+            for idx, upload in enumerate(resolved_uploads, start=1):
+                broadcaster.publish(
+                    JobEvent(
+                        job_id=job.id,
+                        stage=ImportStatus.INVENTORYING.value,
+                        progress=int(10 + (idx / total_uploads) * 70),
+                        data={"upload_id": upload.id, "current": idx, "total": total_uploads},
+                    )
+                )
+                try:
+                    candidates = await self._create_candidates_for_upload(
+                        session, user.id, upload, job.id
+                    )
+                    for candidate in candidates:
+                        candidate_ids.append(candidate.id)
+                except FitCheckError as error:
+                    errors.append(f"{upload.id}: {error.code}")
+                    continue
+
+            job.progress = 100
+            if candidate_ids:
+                job.status = ImportStatus.AWAITING_REVIEW.value
+                job.error_code = "PARTIAL_IMPORT" if errors else None
+                job.error_message = "; ".join(errors) if errors else None
+            else:
+                job.status = ImportStatus.FAILED.value
+                job.error_code = "IMPORT_FAILED"
+                job.error_message = (
+                    "; ".join(errors) or "No reviewable garment candidates were created."
+                )
+
+            await session.commit()
+
             broadcaster.publish(
                 JobEvent(
                     job_id=job.id,
-                    stage=ImportStatus.INVENTORYING.value,
-                    progress=int(10 + (idx / total_uploads) * 70),
-                    data={"upload_id": upload.id, "current": idx, "total": total_uploads},
+                    stage=job.status,
+                    progress=100,
+                    data={
+                        "candidate_ids": candidate_ids,
+                        "error_code": job.error_code,
+                        "error_message": job.error_message,
+                    },
                 )
             )
-            try:
-                candidates = await self._create_candidates_for_upload(
-                    session, user.id, upload, job.id
-                )
-                for candidate in candidates:
-                    candidate_ids.append(candidate.id)
-            except FitCheckError as error:
-                errors.append(f"{upload.id}: {error.code}")
-                continue
-
-        job.progress = 100
-        if candidate_ids:
-            job.status = ImportStatus.AWAITING_REVIEW.value
-            job.error_code = "PARTIAL_IMPORT" if errors else None
-            job.error_message = "; ".join(errors) if errors else None
-        else:
-            job.status = ImportStatus.FAILED.value
-            job.error_code = "IMPORT_FAILED"
-            job.error_message = (
-                "; ".join(errors) or "No reviewable garment candidates were created."
-            )
-
-        broadcaster.publish(
-            JobEvent(
-                job_id=job.id,
-                stage=job.status,
-                progress=100,
-                data={"candidate_count": len(candidate_ids)},
-                error_code=job.error_code,
-                error_message=job.error_message,
-            )
-        )
-        await session.commit()
-        return await self.get_import(session, job.id)
 
     async def get_import(self, session: AsyncSession, job_id: str) -> ImportJobResponse:
         user = await self._ensure_demo_user(session)
@@ -496,9 +529,9 @@ class MilestoneOneWorkflow:
                 )
             
             prompt = (
-                "Create a clean, catalog-style transparent PNG cutout of the garment in this image. "
-                "Exclude the wearer, skin, hair, adjacent garments, props, hangers, backgrounds, and invented details. "
-                "Make the background entirely transparent."
+                "Perform background removal ONLY. Keep the garment EXACTLY as it appears in the original image. "
+                "Do NOT alter colors, shape, or texture. Do NOT generate new details. "
+                "Only erase the background, wearer, skin, and props, leaving the background transparent."
             )
             
             request = ImageGenerationRequest(
