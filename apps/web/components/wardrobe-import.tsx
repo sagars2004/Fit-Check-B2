@@ -159,7 +159,7 @@ export function WardrobeImport() {
     try {
       const updated = await updateGarment(garmentId, update);
       setNotice(`Updated ${updated.name}; its source evidence was left unchanged.`);
-      if (update.status === "archived" && viewingGarmentId === garmentId) {
+      if (update.archive === true && viewingGarmentId === garmentId) {
         setViewingGarmentId(null);
       }
       await refresh();

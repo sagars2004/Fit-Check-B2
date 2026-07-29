@@ -191,13 +191,13 @@ export type GarmentUpdate = {
 export type WeatherSnapshot = {
   location: string;
   forecast_date: string;
-  low_c: number;
-  high_c: number;
-  apparent_high_c: number;
+  low_f: number;
+  high_f: number;
+  apparent_high_f: number;
   precipitation_probability: number;
-  precipitation_mm: number;
+  precipitation_inch: number;
   weather_code: number;
-  wind_kph: number;
+  wind_mph: number;
   condition: string;
   source: string;
   advisory: string | null;

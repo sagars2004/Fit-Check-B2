@@ -15,13 +15,13 @@ class StaticColdRainWeather:
         return WeatherSnapshot(
             location=location,
             forecast_date=forecast_date,
-            low_c=2.0,
-            high_c=7.0,
-            apparent_high_c=4.0,
+            low_f=35.6,
+            high_f=44.6,
+            apparent_high_f=39.2,
             precipitation_probability=85,
-            precipitation_mm=8.2,
+            precipitation_inch=0.32,
             weather_code=63,
-            wind_kph=26.0,
+            wind_mph=16.2,
             condition="rainy",
             source="test",
         )

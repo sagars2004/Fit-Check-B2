@@ -244,13 +244,13 @@ class GarmentResponse(BaseModel):
 class WeatherSnapshotResponse(BaseModel):
     location: str
     forecast_date: date
-    low_c: float
-    high_c: float
-    apparent_high_c: float
+    low_f: float
+    high_f: float
+    apparent_high_f: float
     precipitation_probability: int
-    precipitation_mm: float
+    precipitation_inch: float
     weather_code: int
-    wind_kph: float
+    wind_mph: float
     condition: str
     source: str
     advisory: str | None = None

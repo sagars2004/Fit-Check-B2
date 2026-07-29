@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help install dev-web dev-api test lint typecheck build db-up db-down migrate gmi-smoke
+.PHONY: help install dev-web dev-api test lint typecheck build db-up db-down migrate nvidia-smoke
 
 help:
 	@printf '%s\n' 'Fit Check commands:' \
@@ -14,7 +14,7 @@ help:
 	  '  make db-up       Start local PostgreSQL' \
 	  '  make db-down     Stop local PostgreSQL' \
 	  '  make migrate     Apply API database migrations' \
-	  '  make gmi-smoke   Run the explicitly enabled GMI capability probe'
+	  '  make nvidia-smoke   Run the explicitly enabled NVIDIA capability probe'
 
 install:
 	npm install
@@ -49,5 +49,5 @@ db-down:
 migrate:
 	cd services/api && uv run alembic upgrade head
 
-gmi-smoke:
-	cd services/api && uv run python -m app.scripts.gmi_smoke_test
+nvidia-smoke:
+	cd services/api && uv run python -m app.scripts.nvidia_smoke_test

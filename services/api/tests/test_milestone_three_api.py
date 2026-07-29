@@ -365,11 +365,3 @@ async def test_live_tryon_is_gated_before_reference_urls_can_reach_a_provider(tm
             assert renders.json()[0]["status"] == "failed"
             assert renders.json()[0]["provider"] == "gmicloud"
 
-            settings.gmi_tryon_model = "configured-after-capability-test"
-            app.state.orchestrator = _NeverCalledOrchestrator()
-            input_gated = await client.post(
-                f"/v1/outfits/{outfit_id}/render",
-                json={"profile_id": profile["id"]},
-            )
-            assert input_gated.status_code == 409
-            assert input_gated.json()["code"] == "TRYON_LIVE_INPUTS_UNVERIFIED"

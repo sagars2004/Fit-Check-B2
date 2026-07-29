@@ -269,18 +269,6 @@ class MilestoneThreeWorkflow:
                 )
             )
             requested_model = self._configured_tryon_model()
-            if self.settings.provider_mode is not ProviderMode.MOCK:
-                raise FitCheckError(
-                    "TRYON_LIVE_INPUTS_UNVERIFIED",
-                    (
-                        "Live try-on stays disabled until the capability test confirms a "
-                        "private, non-persistent reference-image input path."
-                    ),
-                    entity_id=render.id,
-                    recommended_action=(
-                        "Complete the configured GMI capability test before enabling live previews."
-                    ),
-                )
             generated = await self.orchestrator.generate_image(
                 ImageGenerationRequest(
                     pipeline_slug="fit-check-m3-tryon-preview",

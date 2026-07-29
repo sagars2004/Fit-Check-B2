@@ -283,7 +283,7 @@ class MilestoneTwoWorkflow:
             title=_outfit_title(items),
             weather=_weather_response(weather),
             occasion=plan.occasion,
-            score=float(plan.score),
+            score=plan.score,
             reasoning=plan.reasoning,
             status=plan.status,
             planner_run_id=plan.planner_run_id,
@@ -365,7 +365,7 @@ def _build_outfits(
     if not (groups["one_piece"] or (groups["top"] and groups["bottom"])):
         return [], []
 
-    needs_outerwear = weather.low_c < 12 or weather.precipitation_probability >= 40
+    needs_outerwear = weather.low_f < 54 or weather.precipitation_probability >= 40
     options: list[_PlannedOutfit] = []
     primary_sets: list[tuple[tuple[str, Garment], ...]] = []
     primary_sets.extend((("one_piece", garment),) for garment in groups["one_piece"])
@@ -386,7 +386,7 @@ def _build_outfits(
         if groups["footwear"]:
             shoe_options = list(groups["footwear"])
         accessory_options: list[Garment | None] = [None]
-        if groups["accessory"] and (weather.low_c < 10 or "dinner" in occasion.casefold()):
+        if groups["accessory"] and (weather.low_f < 50 or "dinner" in occasion.casefold()):
             accessory_options = [None, groups["accessory"][0]]
         for outerwear, shoe, accessory in product(outer_options, shoe_options, accessory_options):
             entries = list(primary)
@@ -456,7 +456,7 @@ def _weather_disqualifies(
         if role != "bottom":
             continue
         category = garment.category.casefold()
-        if "short" in category and (weather.high_c < 18 or weather.precipitation_probability >= 40):
+        if "short" in category and (weather.high_f < 65 or weather.precipitation_probability >= 40):
             return True
     return False
 
@@ -480,9 +480,9 @@ def _score_outfit(
         score -= min(garment.wear_count, 12) * 0.7
         if utilization_mode:
             score += min(8.0, 8.0 / (garment.wear_count + 1))
-        if weather.low_c < 12 and ({"winter", "cold", "warm"} & (tags | seasons)):
+        if weather.low_f < 54 and ({"winter", "cold", "warm"} & (tags | seasons)):
             score += 8
-        if weather.high_c >= 20 and ({"summer", "lightweight", "breathable"} & (tags | seasons)):
+        if weather.high_f >= 68 and ({"summer", "lightweight", "breathable"} & (tags | seasons)):
             score += 6
         if any(term in occasion_terms for term in ("work", "office", "commute")) and (
             {"work", "office", "smart", "formal"} & tags or "blazer" in garment.category.casefold()
@@ -499,7 +499,7 @@ def _score_outfit(
     score += _palette_score(colors)
     if weather.precipitation_probability >= 40 and any(role == "outerwear" for role, _ in entries):
         score += 12
-    if weather.low_c < 12 and any(role == "outerwear" for role, _ in entries):
+    if weather.low_f < 54 and any(role == "outerwear" for role, _ in entries):
         score += 8
     return score
 
@@ -527,7 +527,7 @@ def _reasoning(
     primary_names = [
         garment.name for role, garment in entries if role in {"top", "bottom", "one_piece"}
     ]
-    detail = f"{weather.condition.title()} {weather.low_c:.0f}–{weather.high_c:.0f}°C"
+    detail = f"{weather.condition.title()} {weather.low_f:.0f}–{weather.high_f:.0f}°F"
     if weather.precipitation_probability >= 40:
         detail += f" with a {weather.precipitation_probability}% chance of precipitation"
     description = f"{detail} suits {' + '.join(primary_names)} for {occasion.strip()}."

@@ -215,21 +215,14 @@ class MilestoneOneWorkflow:
         session.add(job)
         await session.commit()
 
-        background_tasks.add_task(
-            self._process_import_job, database, job.id, [u.id for u in resolved_uploads]
+        await self._process_import_job(
+            database, job.id, [u.id for u in resolved_uploads]
         )
 
-        return ImportJobResponse(
-            id=job.id,
-            status=job.status,
-            progress=job.progress,
-            upload_ids=upload_ids,
-            candidate_ids=[],
-            candidate_count=0,
-            error_code=None,
-            error_message=None,
-            stages=[],
-        )
+        async with database.session() as session:
+            final_job = await self.get_import(session, job.id)
+
+        return final_job
 
     async def _process_import_job(self, database: Database, job_id: str, upload_ids: list[str]) -> None:
         async with database.session() as session:

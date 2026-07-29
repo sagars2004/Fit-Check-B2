@@ -47,6 +47,8 @@ class GMICloudCapabilityClient:
             value = payload.get(key) if isinstance(payload, dict) else None
             if isinstance(value, list):
                 return [item for item in value if isinstance(item, dict)]
+        if isinstance(payload, dict) and isinstance(payload.get("model_ids"), list):
+            return [{"id": m, "name": str(m)} for m in payload["model_ids"]]
         return []
 
     async def describe_media_model(self, model_id: str) -> dict[str, Any]:
@@ -151,19 +153,28 @@ class GenblazeGMICloudOrchestrator:
         from genblaze_gmicloud import GMICloudImageProvider
         from genblaze_s3 import S3StorageBackend
 
-        os.environ.setdefault(
-            "B2_KEY_ID",
-            b2_key_id.get_secret_value(),
-        )
-        os.environ.setdefault(
-            "B2_APP_KEY",
-            b2_app_key.get_secret_value(),
-        )
-        sink = ObjectStorageSink(
-            S3StorageBackend.for_backblaze(b2_bucket),
-            key_strategy=KeyStrategy.HIERARCHICAL,
-            prefix=self.settings.b2_prefix,
-        )
+        if self.settings.b2_region:
+            os.environ["B2_REGION"] = self.settings.b2_region
+        os.environ["B2_KEY_ID"] = b2_key_id.get_secret_value()
+        os.environ["B2_APP_KEY"] = b2_app_key.get_secret_value()
+
+        try:
+            sink = ObjectStorageSink(
+                S3StorageBackend.for_backblaze(
+                    b2_bucket,
+                    region=self.settings.b2_region,
+                    key_id=b2_key_id.get_secret_value(),
+                    app_key=b2_app_key.get_secret_value(),
+                ),
+                key_strategy=KeyStrategy.HIERARCHICAL,
+                prefix=self.settings.b2_prefix,
+            )
+        except Exception as error:
+            raise FitCheckError(
+                "GENBLAZE_EXECUTION_FAILED",
+                f"Failed to initialize Genblaze storage sink: {error}",
+                retryable=True,
+            ) from error
         provider = GMICloudImageProvider(api_key=api_key.get_secret_value())
         step_kwargs: dict[str, Any] = {
             "model": model,

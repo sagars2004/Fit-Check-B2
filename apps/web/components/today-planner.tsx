@@ -170,9 +170,9 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
               <p>{formatDate(recommendation.weather.forecast_date)} · {recommendation.weather.condition}</p>
             </div>
             <dl>
-              <div><dt>Temperature</dt><dd>{Math.round(recommendation.weather.low_c)}–{Math.round(recommendation.weather.high_c)}°C</dd></div>
-              <div><dt>Rain</dt><dd>{recommendation.weather.precipitation_probability}% · {recommendation.weather.precipitation_mm} mm</dd></div>
-              <div><dt>Wind</dt><dd>{Math.round(recommendation.weather.wind_kph)} km/h</dd></div>
+              <div><dt>Temperature</dt><dd>{Math.round(recommendation.weather.low_f)}–{Math.round(recommendation.weather.high_f)}°F</dd></div>
+              <div><dt>Rain</dt><dd>{recommendation.weather.precipitation_probability}% · {recommendation.weather.precipitation_inch} in</dd></div>
+              <div><dt>Wind</dt><dd>{Math.round(recommendation.weather.wind_mph)} mph</dd></div>
             </dl>
             {recommendation.weather.advisory ? <p className="forecast-advisory">{recommendation.weather.advisory}</p> : null}
           </section>

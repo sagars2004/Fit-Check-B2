@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
-from hashlib import sha256
 from typing import Any, Protocol
 
 import httpx
@@ -14,13 +13,13 @@ from app.core.config import Settings
 class WeatherSnapshot:
     location: str
     forecast_date: date
-    low_c: float
-    high_c: float
-    apparent_high_c: float
+    low_f: float
+    high_f: float
+    apparent_high_f: float
     precipitation_probability: int
-    precipitation_mm: float
+    precipitation_inch: float
     weather_code: int
-    wind_kph: float
+    wind_mph: float
     condition: str
     source: str
     advisory: str | None = None
@@ -29,13 +28,13 @@ class WeatherSnapshot:
         return {
             "location": self.location,
             "forecast_date": self.forecast_date.isoformat(),
-            "low_c": self.low_c,
-            "high_c": self.high_c,
-            "apparent_high_c": self.apparent_high_c,
+            "low_f": self.low_f,
+            "high_f": self.high_f,
+            "apparent_high_f": self.apparent_high_f,
             "precipitation_probability": self.precipitation_probability,
-            "precipitation_mm": self.precipitation_mm,
+            "precipitation_inch": self.precipitation_inch,
             "weather_code": self.weather_code,
-            "wind_kph": self.wind_kph,
+            "wind_mph": self.wind_mph,
             "condition": self.condition,
             "source": self.source,
             "advisory": self.advisory,
@@ -43,16 +42,20 @@ class WeatherSnapshot:
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> WeatherSnapshot:
+        apparent_val = value.get("apparent_high_f")
+        if apparent_val is None:
+            apparent_val = value["high_f"]
+
         return cls(
             location=str(value["location"]),
             forecast_date=date.fromisoformat(str(value["forecast_date"])),
-            low_c=float(value["low_c"]),
-            high_c=float(value["high_c"]),
-            apparent_high_c=float(value.get("apparent_high_c", value["high_c"])),
+            low_f=float(value["low_f"]),
+            high_f=float(value["high_f"]),
+            apparent_high_f=float(apparent_val),
             precipitation_probability=int(value["precipitation_probability"]),
-            precipitation_mm=float(value["precipitation_mm"]),
+            precipitation_inch=float(value["precipitation_inch"]),
             weather_code=int(value["weather_code"]),
-            wind_kph=float(value["wind_kph"]),
+            wind_mph=float(value["wind_mph"]),
             condition=str(value["condition"]),
             source=str(value["source"]),
             advisory=_optional_string(value.get("advisory")),
@@ -83,13 +86,13 @@ class WeatherService:
             return WeatherSnapshot(
                 location=fallback.location,
                 forecast_date=fallback.forecast_date,
-                low_c=fallback.low_c,
-                high_c=fallback.high_c,
-                apparent_high_c=fallback.apparent_high_c,
+                low_f=fallback.low_f,
+                high_f=fallback.high_f,
+                apparent_high_f=fallback.apparent_high_f,
                 precipitation_probability=fallback.precipitation_probability,
-                precipitation_mm=fallback.precipitation_mm,
+                precipitation_inch=fallback.precipitation_inch,
                 weather_code=fallback.weather_code,
-                wind_kph=fallback.wind_kph,
+                wind_mph=fallback.wind_mph,
                 condition=fallback.condition,
                 source="mock_fallback",
                 advisory=(
@@ -113,6 +116,9 @@ class WeatherService:
                     "latitude": result["latitude"],
                     "longitude": result["longitude"],
                     "timezone": "auto",
+                    "temperature_unit": "fahrenheit",
+                    "wind_speed_unit": "mph",
+                    "precipitation_unit": "inch",
                     "start_date": forecast_date.isoformat(),
                     "end_date": forecast_date.isoformat(),
                     "daily": ",".join(
@@ -140,13 +146,13 @@ class WeatherService:
         return WeatherSnapshot(
             location=resolved_location or location,
             forecast_date=forecast_date,
-            low_c=round(float(daily["temperature_2m_min"][0]), 1),
-            high_c=round(float(daily["temperature_2m_max"][0]), 1),
-            apparent_high_c=round(float(daily["apparent_temperature_max"][0]), 1),
+            low_f=round(float(daily["temperature_2m_min"][0]), 1),
+            high_f=round(float(daily["temperature_2m_max"][0]), 1),
+            apparent_high_f=round(float(daily["apparent_temperature_max"][0]), 1),
             precipitation_probability=int(daily["precipitation_probability_max"][0] or 0),
-            precipitation_mm=round(float(daily["precipitation_sum"][0] or 0), 1),
+            precipitation_inch=round(float(daily["precipitation_sum"][0] or 0), 2),
             weather_code=code,
-            wind_kph=round(float(daily["wind_speed_10m_max"][0] or 0), 1),
+            wind_mph=round(float(daily["wind_speed_10m_max"][0] or 0), 1),
             condition=_condition_for_code(code),
             source="open_meteo",
         )
@@ -155,28 +161,18 @@ class WeatherService:
 def _mock_snapshot(location: str, forecast_date: date) -> WeatherSnapshot:
     """Generate a stable local forecast that keeps demos offline and repeatable."""
 
-    digest = sha256(f"{location.casefold()}|{forecast_date.isoformat()}".encode()).digest()
-    low_c = float(4 + digest[0] % 14)
-    high_c = low_c + float(5 + digest[1] % 8)
-    precipitation_probability = [10, 20, 35, 55, 70][digest[2] % 5]
-    precipitation_mm = (
-        0.0 if precipitation_probability < 35 else round(0.8 + (digest[3] % 19) / 5, 1)
-    )
-    weather_code = (
-        3 if precipitation_probability < 35 else (61 if precipitation_probability < 60 else 63)
-    )
     return WeatherSnapshot(
-        location=location,
+        location=location or "Seattle, WA",
         forecast_date=forecast_date,
-        low_c=low_c,
-        high_c=high_c,
-        apparent_high_c=round(high_c - (digest[4] % 4) * 0.7, 1),
-        precipitation_probability=precipitation_probability,
-        precipitation_mm=precipitation_mm,
-        weather_code=weather_code,
-        wind_kph=float(8 + digest[5] % 25),
-        condition=_condition_for_code(weather_code),
-        source="mock",
+        low_f=45.5,
+        high_f=58.0,
+        apparent_high_f=55.2,
+        precipitation_probability=80,
+        precipitation_inch=0.3,
+        weather_code=61,
+        wind_mph=12.5,
+        condition="Rain",
+        source="mock_deterministic",
         advisory="Deterministic local demo forecast — switch WEATHER_MODE=live for Open-Meteo.",
     )
 

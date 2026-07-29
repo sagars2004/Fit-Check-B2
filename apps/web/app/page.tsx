@@ -6,7 +6,7 @@ import { TodayPlanner } from "../components/today-planner";
 import { TodayAndPreview } from "../components/today-and-preview";
 
 export default function AppHome() {
-  const [activeTab, setActiveTab] = useState<"planner" | "wardrobe" | "preview">("wardrobe");
+  const [activeTab, setActiveTab] = useState<"wardrobe" | "studio">("wardrobe");
 
   return (
     <>
@@ -21,19 +21,13 @@ export default function AppHome() {
               onClick={() => setActiveTab("wardrobe")}
               className={activeTab === "wardrobe" ? "active" : ""}
             >
-              Workbench
+              Wardrobe
             </button>
             <button 
-              onClick={() => setActiveTab("planner")}
-              className={activeTab === "planner" ? "active" : ""}
+              onClick={() => setActiveTab("studio")}
+              className={activeTab === "studio" ? "active" : ""}
             >
-              Today
-            </button>
-            <button 
-              onClick={() => setActiveTab("preview")}
-              className={activeTab === "preview" ? "active" : ""}
-            >
-              Try-On Studio
+              Studio
             </button>
           </div>
           <div className="nav-stage">
@@ -55,27 +49,13 @@ export default function AppHome() {
           </section>
         )}
 
-        {activeTab === "planner" && (
-          <section className="today-planner">
-            <header className="section-heading">
-              <div>
-                <h2>Outfit Copilot</h2>
-                <p className="workbench-copy">
-                  Contextual recommendations from your active wardrobe.
-                </p>
-              </div>
-            </header>
-            <TodayPlanner />
-          </section>
-        )}
-
-        {activeTab === "preview" && (
+        {activeTab === "studio" && (
           <section className="tryon-studio">
             <header className="section-heading">
               <div>
-                <h2>Try-On Studio</h2>
+                <h2>Studio</h2>
                 <p className="workbench-copy">
-                  Virtual try-on generation and provenance verification.
+                  Outfit copilot and virtual try-on generation.
                 </p>
               </div>
             </header>
