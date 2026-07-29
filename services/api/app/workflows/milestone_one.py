@@ -1024,10 +1024,10 @@ class MilestoneOneWorkflow:
             id=candidate.id,
             upload_id=candidate.upload_id,
             import_job_id=candidate.import_job_id,
-            bbox={key: float(value) for key, value in candidate.bbox.items()},
+            bbox={key: value for key, value in candidate.bbox.items()},
             attributes=attributes,
             unresolved_details=list(candidate.unresolved_details),
-            confidence=float(candidate.confidence),
+            confidence=candidate.confidence,
             status=candidate.status,
             source_crop_key=candidate.source_crop_key,
             source_crop_url=crop_url,
@@ -1123,7 +1123,7 @@ class MilestoneOneWorkflow:
     ) -> DuplicateReviewResponse:
         return DuplicateReviewResponse(
             id=review.id,
-            score=float(review.score),
+            score=review.score,
             evidence=dict(review.evidence),
             status=review.status,
             reviewer_notes=review.reviewer_notes,
@@ -1247,23 +1247,17 @@ class MilestoneOneWorkflow:
     async def _owned_garment_or_none(
         self, session: AsyncSession, user_id: str, garment_id: str
     ) -> Garment | None:
-        return cast(
-            Garment | None,
-            await session.scalar(
-                select(Garment).where(Garment.id == garment_id, Garment.user_id == user_id)
-            ),
+        return await session.scalar(
+            select(Garment).where(Garment.id == garment_id, Garment.user_id == user_id)
         )
 
     async def _primary_evidence(
         self, session: AsyncSession, garment_id: str
     ) -> GarmentEvidence | None:
-        return cast(
-            GarmentEvidence | None,
-            await session.scalar(
-                select(GarmentEvidence)
-                .where(GarmentEvidence.garment_id == garment_id)
-                .order_by(GarmentEvidence.created_at.asc())
-            ),
+        return await session.scalar(
+            select(GarmentEvidence)
+            .where(GarmentEvidence.garment_id == garment_id)
+            .order_by(GarmentEvidence.created_at.asc())
         )
 
 
@@ -1295,7 +1289,7 @@ def _string_list(value: object) -> list[str]:
 
 
 def _optional_string(value: object) -> str | None:
-    return str(value) if isinstance(value, str) else None
+    return value if isinstance(value, str) else None
 
 
 def _import_stages(status: str) -> list[str]:

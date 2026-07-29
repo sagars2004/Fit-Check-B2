@@ -274,7 +274,7 @@ class MilestoneThreeWorkflow:
                     pipeline_slug="fit-check-m3-tryon-preview",
                     tenant_id=user.id,
                     garment_id=outfit.id,
-                    prompt=self._tryon_prompt(payload.correction_hint),
+                    prompt=self._tryon_prompt(payload.correction_hint, sources),
                     prompt_redacted=(
                         "[consented selected-look AI preview; "
                         f"correction_hint_supplied={payload.correction_hint is not None}]"
@@ -318,8 +318,8 @@ class MilestoneThreeWorkflow:
                 }
                 import hashlib
                 import json
-                payload = json.dumps(redacted_manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
-                manifest_hash = hashlib.sha256(payload).hexdigest()
+                manifest_payload = json.dumps(redacted_manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                manifest_hash = hashlib.sha256(manifest_payload).hexdigest()
                 manifest_key = f"genblaze/manifests/{generated.run_id}.json"
             elif generated.content:
                 # Mock mode or legacy fallback
@@ -773,28 +773,22 @@ class MilestoneThreeWorkflow:
     ) -> GarmentAsset | None:
         if not garment.canonical_asset_id:
             return None
-        return cast(
-            GarmentAsset | None,
-            await session.scalar(
-                select(GarmentAsset).where(
-                    GarmentAsset.id == garment.canonical_asset_id,
-                    GarmentAsset.kind == "cutout",
-                    GarmentAsset.qa_status == "approved",
-                    GarmentAsset.deleted_at.is_(None),
-                )
-            ),
+        return await session.scalar(
+            select(GarmentAsset).where(
+                GarmentAsset.id == garment.canonical_asset_id,
+                GarmentAsset.kind == "cutout",
+                GarmentAsset.qa_status == "approved",
+                GarmentAsset.deleted_at.is_(None),
+            )
         )
 
     async def _primary_evidence(
         self, session: AsyncSession, garment_id: str
     ) -> GarmentEvidence | None:
-        return cast(
-            GarmentEvidence | None,
-            await session.scalar(
-                select(GarmentEvidence)
-                .where(GarmentEvidence.garment_id == garment_id)
-                .order_by(GarmentEvidence.created_at.asc())
-            ),
+        return await session.scalar(
+            select(GarmentEvidence)
+            .where(GarmentEvidence.garment_id == garment_id)
+            .order_by(GarmentEvidence.created_at.asc())
         )
 
     async def _resolve_parent_run_id(
@@ -919,7 +913,11 @@ class MilestoneThreeWorkflow:
     def _default_provider(self) -> str:
         return "mock" if self.settings.provider_mode is ProviderMode.MOCK else "gmicloud"
 
-    def _tryon_prompt(self, correction_hint: str | None) -> str:
+    def _tryon_prompt(self, correction_hint: str | None, sources: list[_RenderSource]) -> str:
+        garment_descriptions = ", ".join([
+            f"{' '.join(s.garment.colors)} {s.garment.name} ({s.garment.category})"
+            for s in sources
+        ])
         correction_instruction = (
             " Apply this user-requested correction while preserving source evidence: "
             f"{correction_hint.strip()}"
@@ -927,10 +925,9 @@ class MilestoneThreeWorkflow:
             else ""
         )
         return (
-            "Create one AI visualization of the consented reference person wearing the selected "
-            "owned garment references. Preserve only source-supported garment features. Do not "
-            "claim precise size, fit, fabric drape, or body shape. Avoid inventing additional "
-            "garments, accessories, background details, or sensitive traits."
+            f"Create one AI visualization of the consented reference person wearing the following garments: {garment_descriptions}. "
+            "Preserve only source-supported garment features. Do not claim precise size, fit, fabric drape, or body shape. "
+            "Avoid inventing additional garments, accessories, background details, or sensitive traits."
             f"{correction_instruction}"
         )
 

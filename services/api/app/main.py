@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,7 +23,7 @@ def create_app(runtime_settings: Settings | None = None) -> FastAPI:
     settings = runtime_settings or get_settings()
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None, Any]:
         logging.basicConfig(level=settings.log_level)
         database = Database(settings)
         if settings.auto_create_schema:

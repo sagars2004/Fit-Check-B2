@@ -149,7 +149,8 @@ class GenblazeGMICloudOrchestrator:
 
         # SDK imports stay isolated from mock mode and preserve the official
         # Genblaze pipeline + B2 ObjectStorageSink architecture.
-        from genblaze_core import KeyStrategy, Modality, ObjectStorageSink, Pipeline
+        from genblaze_core import KeyStrategy, Modality, ObjectStorageSink
+        from genblaze_core.pipeline import Pipeline
         from genblaze_gmicloud import GMICloudImageProvider
         from genblaze_s3 import S3StorageBackend
 
@@ -185,7 +186,7 @@ class GenblazeGMICloudOrchestrator:
         # The exact reference-input field is capability-dependent. The smoke
         # test records it before this live path is enabled.
         if request.source_urls:
-            step_kwargs["image_inputs"] = list(request.source_urls)
+            step_kwargs["image"] = list(request.source_urls)
 
         pipeline = Pipeline(request.pipeline_slug, tenant_id=request.tenant_id).step(provider, **step_kwargs)
         try:
@@ -203,7 +204,7 @@ class GenblazeGMICloudOrchestrator:
                 "PROVIDER_GENERATION_FAILED",
                 getattr(step, "error", "GMI did not return a generated image."),
                 retryable=True,
-                correlation_id=str(getattr(run, "id", "")) or None,
+                correlation_id=str(getattr(run, "run_id", "")) or None,
             )
         asset = step.assets[0]
         
@@ -211,18 +212,23 @@ class GenblazeGMICloudOrchestrator:
         if not object_key and getattr(asset, "url", None):
             from urllib.parse import urlparse
             parsed = urlparse(asset.url)
-            object_key = parsed.path.lstrip("/")
+            path = parsed.path.lstrip("/")
+            # If the URL is a B2 URL, it might include the bucket name in the path
+            if b2_bucket and path.startswith(f"{b2_bucket}/"):
+                object_key = path[len(f"{b2_bucket}/"):]
+            else:
+                object_key = path
             
         if not object_key:
             raise FitCheckError(
                 "PROVIDER_GENERATION_FAILED",
                 "The provider returned an asset without a verifiable object key.",
                 retryable=True,
-                correlation_id=str(getattr(run, "id", "")) or None,
+                correlation_id=str(getattr(run, "run_id", "")) or None,
             )
 
         return GeneratedMedia(
-            run_id=str(getattr(run, "id", None) or getattr(manifest, "run_id", "")),
+            run_id=str(getattr(run, "run_id", None) or getattr(getattr(manifest, "run", None), "run_id", "")),
             provider="gmicloud",
             model=model,
             content=None,
