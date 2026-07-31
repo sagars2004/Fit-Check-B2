@@ -417,6 +417,26 @@ class MilestoneThreeWorkflow:
         )
         return [await self._render_response(session, render) for render in renders]
 
+    async def list_all_renders(
+        self, session: AsyncSession, limit: int = 50
+    ) -> list[TryOnRenderResponse]:
+        user = await self._ensure_demo_user(session)
+        renders = list(
+            (
+                await session.scalars(
+                    select(TryOnRender)
+                    .join(OutfitPlan, TryOnRender.outfit_id == OutfitPlan.id)
+                    .where(
+                        OutfitPlan.user_id == user.id,
+                        TryOnRender.status == "preview_ready"
+                    )
+                    .order_by(TryOnRender.created_at.desc())
+                    .limit(limit)
+                )
+            ).all()
+        )
+        return [await self._render_response(session, render) for render in renders]
+
     async def _finalize_profile(
         self,
         session: AsyncSession,

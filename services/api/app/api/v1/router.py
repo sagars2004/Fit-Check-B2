@@ -369,6 +369,15 @@ async def list_outfit_renders(
     return await _milestone_three_workflow(request).list_renders(session, outfit_id)
 
 
+@router.get("/renders", response_model=list[TryOnRenderResponse])
+async def list_all_renders(
+    request: Request,
+    limit: int = Query(50, le=100),
+    session: AsyncSession = Depends(get_session),
+) -> list[TryOnRenderResponse]:
+    return await _milestone_three_workflow(request).list_all_renders(session, limit=limit)
+
+
 @router.get("/outfits/renders/{render_id}/events")
 async def stream_render_events(render_id: str) -> StreamingResponse:
     """Stream real-time Server-Sent Events (SSE) for preview render progress."""

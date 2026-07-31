@@ -109,11 +109,12 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
     <section
       aria-busy={isPlanning}
       aria-labelledby="today-heading"
-      className="today-planner"
+      className="today-planner bento-grid"
       id="today"
       tabIndex={-1}
     >
-      <div className="section-heading">
+      <div className="bento-box bento-col-12">
+        <div className="section-heading">
         <div>
           <p className="eyebrow">Milestone 2 · today</p>
           <h2 id="today-heading">A useful answer for the day you actually have.</h2>
@@ -124,8 +125,13 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
         Fit Check applies weather, occasion, palette, recent wear, and optional utilization rules locally.
         Every option is validated against your approved wardrobe before it appears.
       </p>
+      </div>
 
-      <form className="today-context" onSubmit={(event) => void handlePlan(event)}>
+      <div className="bento-box bento-col-4">
+        <div className="panel-heading">
+          <h3>Plan a look</h3>
+        </div>
+      <form className="today-context" onSubmit={(event) => void handlePlan(event)} style={{ display: 'flex', flexDirection: 'column' }}>
         <label>
           Location
           <input onChange={(event) => setLocation(event.target.value)} placeholder="e.g. New York, NY" value={location} />
@@ -153,17 +159,23 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
             <small>Gently favor compatible pieces with fewer wears.</small>
           </span>
         </label>
-        <button className="primary-button" disabled={isPlanning} type="submit">
+        <button className="primary-button" disabled={isPlanning} type="submit" style={{ marginTop: '16px' }}>
           {isPlanning ? "Planning owned looks…" : "Plan three looks"}
         </button>
       </form>
+      </div>
 
-      {notice ? <p className="success-message" role="status">{notice}</p> : null}
-      {error ? <p className="error-message" role="alert">{error}</p> : null}
+      {(notice || error) ? (
+        <div className="bento-col-12" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {notice ? <p className="success-message" role="status" style={{ marginBottom: 0 }}>{notice}</p> : null}
+          {error ? <p className="error-message" role="alert" style={{ marginBottom: 0 }}>{error}</p> : null}
+        </div>
+      ) : null}
 
+      <div className="bento-box bento-col-8">
       {recommendation ? (
         <>
-          <section className="forecast-card" aria-label="Forecast context">
+          <section className="forecast-card" aria-label="Forecast context" style={{ border: 'none', margin: 0, padding: 0 }}>
             <div>
               <p className="eyebrow">Forecast</p>
               <h3>{recommendation.weather.location}</h3>
@@ -183,7 +195,17 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
               <ul>{recommendation.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
             </section>
           ) : null}
+        </>
+      ) : (
+        <p className="empty-state" role="status" style={{ margin: 'auto' }}>
+          Choose a date and occasion to plan from your approved wardrobe. Held items and unreviewed
+          candidates are excluded, and planning never creates an image.
+        </p>
+      )}
+      </div>
 
+      {recommendation ? (
+        <div className="bento-box bento-col-12">
           <div className="recommendation-heading">
             <div>
               <p className="eyebrow">Three valid options</p>
@@ -214,13 +236,8 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
               previewSelected={selectedPreviewOutfitId === viewingOutfitId}
             />
           )}
-        </>
-      ) : (
-        <p className="empty-state" role="status">
-          Choose a date and occasion to plan from your approved wardrobe. Held items and unreviewed
-          candidates are excluded, and planning never creates an image.
-        </p>
-      )}
+        </div>
+      ) : null}
     </section>
   );
 }

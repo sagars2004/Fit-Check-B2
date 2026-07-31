@@ -516,6 +516,10 @@ export async function getOutfitRenders(outfitId: string): Promise<TryOnRender[]>
   return requestJson<TryOnRender[]>(`/v1/outfits/${outfitId}/renders`);
 }
 
+export async function getAllRenders(limit: number = 50): Promise<TryOnRender[]> {
+  return requestJson<TryOnRender[]>(`/v1/renders?limit=${limit}`);
+}
+
 export async function purgeUserData(): Promise<{ status: string; message: string }> {
   return requestJson<{ status: string; message: string }>("/v1/users/me/data", {
     method: "DELETE",

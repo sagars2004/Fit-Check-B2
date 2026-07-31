@@ -245,11 +245,13 @@ export function WardrobeImport() {
     <section
       aria-busy={loadState === "loading" || uploading}
       aria-labelledby="wardrobe-heading"
-      className="wardrobe-workbench"
+      className="wardrobe-workbench bento-grid"
       id="closet"
       tabIndex={-1}
     >
-      <div className="section-heading">
+      <div className="bento-box bento-col-12">
+        <div className="section-heading">
+
         <div>
           <p className="eyebrow">Milestone 1 · import and closet</p>
           <h2 id="wardrobe-heading">Build a closet you can trust.</h2>
@@ -266,11 +268,29 @@ export function WardrobeImport() {
         wardrobe. Fit Check never calls a guessed crop a verified cutout, and it never auto-merges
         similar clothes.
       </p>
+      </div>
 
+      <div className="bento-col-12" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {notice ? <p className="success-message" role="status">{notice}</p> : null}
+        {error ? (
+          <div className="error-message" role="alert">
+            <p>{error}</p>
+            {loadState === "error" ? (
+              <button className="inline-retry-button" onClick={() => void refresh()} type="button">
+                Try loading the closet again
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {importJob ? <ImportProgress job={importJob} /> : null}
+      </div>
 
-
-      <form className="upload-panel" onSubmit={(event) => void handleUpload(event)}>
-        <label className="drop-zone" htmlFor="outfit-photos">
+      <div className="bento-box bento-col-4">
+        <div className="panel-heading">
+          <h3>Add to closet</h3>
+        </div>
+        <form className="upload-panel" onSubmit={(event) => void handleUpload(event)} style={{ marginBottom: 0 }}>
+          <label className="drop-zone" htmlFor="outfit-photos">
           <span className="drop-icon" aria-hidden="true">↑</span>
           <span>
             <strong>Choose outfit photos</strong>
@@ -295,26 +315,14 @@ export function WardrobeImport() {
           </button>
         </div>
       </form>
+      </div>
 
-      {notice ? <p className="success-message" role="status">{notice}</p> : null}
-      {error ? (
-        <div className="error-message" role="alert">
-          <p>{error}</p>
-          {loadState === "error" ? (
-            <button className="inline-retry-button" onClick={() => void refresh()} type="button">
-              Try loading the closet again
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      {importJob ? <ImportProgress job={importJob} /> : null}
-
-      <div className="review-header">
-        <div>
-          <p className="eyebrow">Review queue</p>
-          <h3>Evidence first, identity second.</h3>
-        </div>
+      <div className="bento-box bento-col-8">
+        <div className="review-header">
+          <div>
+            <p className="eyebrow">Review queue</p>
+            <h3>Evidence first, identity second.</h3>
+          </div>
         <span>{candidates.filter((candidate) => candidate.status === "awaiting_review").length} awaiting review</span>
       </div>
 
@@ -332,12 +340,14 @@ export function WardrobeImport() {
           />
         ))}
       </div>
+      </div>
 
-      <div className="closet-heading">
-        <div>
-          <p className="eyebrow">Owned wardrobe</p>
-          <h3>Owned items, with the source still visible.</h3>
-        </div>
+      <div className="bento-box bento-col-12">
+        <div className="closet-heading">
+          <div>
+            <p className="eyebrow">Owned wardrobe</p>
+            <h3>Owned items, with the source still visible.</h3>
+          </div>
         <label className="search-field">
           <span className="sr-only">Filter wardrobe</span>
           <input
@@ -365,6 +375,7 @@ export function WardrobeImport() {
           />
         ))}
       </div>
+      </div>
 
       {viewingGarmentId && garments.find((g) => g.id === viewingGarmentId) && (
         <GarmentViewer
@@ -389,7 +400,7 @@ export function WardrobeImport() {
 
 function ImportProgress({ job }: { job: ImportJob }) {
   return (
-    <section className="import-progress" aria-label="Import progress">
+    <section className="import-progress bento-box bento-col-12" aria-label="Import progress" style={{ marginBottom: 0 }}>
       <div>
         <p className="eyebrow">Import {job.id.slice(0, 8)}</p>
         <strong>{humanize(job.status)} · {job.progress}%</strong>
@@ -711,8 +722,9 @@ function DuplicateReviewQueue({
   onDecide: (reviewId: string, action: "keep_separate" | "mark_likely_duplicate") => Promise<void>;
   reviews: DuplicateReview[];
 }) {
+  if (reviews.length === 0) return null;
   return (
-    <section className="duplicate-queue" aria-labelledby="duplicate-review-heading">
+    <section className="duplicate-queue bento-box bento-col-12" aria-labelledby="duplicate-review-heading">
       <div className="closet-heading">
         <div>
           <p className="eyebrow">Conservative duplicate review</p>
@@ -723,12 +735,9 @@ function DuplicateReviewQueue({
       <p className="workbench-copy">
         Local 16×16 luminance signatures only flag closely matching, approved cutouts in the same category. Fit Check never merges, archives, or deletes either item automatically.
       </p>
-      {reviews.length === 0 ? (
-        <p className="empty-state">No close visual matches need your attention.</p>
-      ) : (
-        <div className="duplicate-grid">
-          {reviews.map((review) => (
-            <article className="duplicate-card" key={review.id}>
+      <div className="duplicate-grid">
+        {reviews.map((review) => (
+          <article className="duplicate-card" key={review.id}>
               <div className="duplicate-meta">
                 <span className="review-badge">Human review required</span>
                 <span>{Math.round(review.score * 100)}% visual similarity</span>
@@ -757,8 +766,7 @@ function DuplicateReviewQueue({
               </div>
             </article>
           ))}
-        </div>
-      )}
+      </div>
     </section>
   );
 }

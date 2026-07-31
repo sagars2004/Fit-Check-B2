@@ -294,11 +294,12 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
     <section
       aria-busy={isLoadingProfiles || isLoadingRenders || isUploading || isGenerating}
       aria-labelledby="try-on-heading"
-      className="tryon-studio"
+      className="tryon-studio bento-grid"
       id="try-on-studio"
       tabIndex={-1}
     >
-      <div className="section-heading">
+      <div className="bento-box bento-col-12">
+        <div className="section-heading">
         <div>
           <p className="eyebrow">Milestone 3 · selected AI preview</p>
           <h2 id="try-on-heading">Preview one owned look on you, with the evidence in view.</h2>
@@ -312,20 +313,25 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
         It is an AI-generated visualization—not a promise about size, fit, drape, fabric, body shape,
         or unseen garment details.
       </p>
+      </div>
 
-      {notice ? <p className="success-message" role="status">{notice}</p> : null}
-      {error ? (
-        <div className="error-message" role="alert">
-          <p>{error}</p>
-          {retryScope ? (
-            <button className="inline-retry-button" onClick={() => void handleRetryLoad()} type="button">
-              Retry loading {retryScope === "profiles" ? "reference photos" : "preview history"}
-            </button>
+      {(notice || error) ? (
+        <div className="bento-col-12" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {notice ? <p className="success-message" role="status" style={{ marginBottom: 0 }}>{notice}</p> : null}
+          {error ? (
+            <div className="error-message" role="alert" style={{ marginBottom: 0 }}>
+              <p>{error}</p>
+              {retryScope ? (
+                <button className="inline-retry-button" onClick={() => void handleRetryLoad()} type="button">
+                  Retry loading {retryScope === "profiles" ? "reference photos" : "preview history"}
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       ) : null}
 
-      <div className="tryon-setup-grid">
+      <>
         <SelectedOutfitCard outfit={outfit} onClearSelection={onClearSelection} sources={selectedOutfitSources} />
         <ReferencePhotoPanel
           deletingProfileId={deletingProfileId}
@@ -341,10 +347,10 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
           referenceFile={referenceFile}
           selectedProfileId={selectedProfileId}
         />
-      </div>
+      </>
 
       {outfit ? (
-        <section className="preview-request" aria-labelledby="preview-request-heading">
+        <section className="preview-request bento-box bento-col-12" aria-labelledby="preview-request-heading" style={{ border: 'none', marginBottom: 0 }}>
           <div>
             <p className="eyebrow">Step 3 · request exactly one preview</p>
             <h3 id="preview-request-heading">{outfit.title}</h3>
@@ -404,10 +410,12 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
           selectedProfile={selectedProfile}
         />
       ) : (
-        <p className="empty-state tryon-empty-state">
-          Choose <strong>Preview on me</strong> from one recommendation above. Fit Check will keep the
-          specific owned garments in view before any preview can be requested.
-        </p>
+        <div className="bento-box bento-col-12">
+          <p className="empty-state tryon-empty-state">
+            Choose <strong>Preview on me</strong> from one recommendation above. Fit Check will keep the
+            specific owned garments in view before any preview can be requested.
+          </p>
+        </div>
       )}
     </section>
   );
@@ -423,7 +431,7 @@ function SelectedOutfitCard({
   sources: PreviewSourceGarment[];
 }) {
   return (
-    <section className="selected-look-panel" aria-labelledby="selected-look-heading">
+    <section className="selected-look-panel bento-box bento-col-6" aria-labelledby="selected-look-heading" style={{ border: 'none', margin: 0 }}>
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Step 1 · selected owned look</p>
@@ -476,7 +484,7 @@ function ReferencePhotoPanel({
   selectedProfileId: string | null;
 }) {
   return (
-    <section className="reference-photo-panel" aria-labelledby="reference-photo-heading">
+    <section className="reference-photo-panel bento-box bento-col-6" aria-labelledby="reference-photo-heading">
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Step 2 · consented reference photo</p>
@@ -581,8 +589,8 @@ function PreviewReview({
   selectedProfile: ModelProfile | null;
 }) {
   return (
-    <section className="preview-review" aria-labelledby="preview-review-heading">
-      <div className="review-header">
+    <section className="preview-review bento-box bento-cinematic bento-col-12" aria-labelledby="preview-review-heading">
+      <div className="review-header" style={{ padding: '32px 32px 0' }}>
         <div>
           <p className="eyebrow">Review the selected preview</p>
           <h3 id="preview-review-heading">{render ? previewStatusLabel(render.status) : "No preview requested"}</h3>
