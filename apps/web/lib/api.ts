@@ -1,7 +1,16 @@
-const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(
-  /\/$/,
-  "",
-);
+function getApiBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_BASE_URL) {
+    return process.env.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, "");
+  }
+  if (
+    typeof window !== "undefined" &&
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1"
+  ) {
+    return "";
+  }
+  return "http://localhost:8000";
+}
 
 export type Health = {
   status: string;
@@ -531,18 +540,22 @@ export function getEventSourceUrl(path: string): string {
 }
 
 export function localMockMediaUrl(objectKey: string): string {
-  return (
-    apiBaseUrl +
+  const mediaPath =
     "/v1/media/" +
     objectKey
       .split("/")
       .map((part) => encodeURIComponent(part))
-      .join("/")
-  );
+      .join("/");
+  return absoluteApiUrl(mediaPath);
 }
 
 function absoluteApiUrl(path: string): string {
-  return path.startsWith("http://") || path.startsWith("https://") ? path : apiBaseUrl + path;
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    return path;
+  }
+  const base = getApiBaseUrl();
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  return base ? `${base}${normalizedPath}` : normalizedPath;
 }
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {

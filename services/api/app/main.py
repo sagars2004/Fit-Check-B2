@@ -43,12 +43,14 @@ def create_app(runtime_settings: Settings | None = None) -> FastAPI:
         description="Private wardrobe media orchestration, storage, and provenance.",
         lifespan=lifespan,
     )
+    configured_origins = [o.strip() for o in settings.web_origin.split(",") if o.strip()]
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=[settings.web_origin],
+        allow_origins=configured_origins or ["*"],
+        allow_origin_regex=r"^https://.*\.vercel\.app$",
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-        allow_headers=["Content-Type", "X-Request-ID"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
     )
 
     @application.exception_handler(FitCheckError)
