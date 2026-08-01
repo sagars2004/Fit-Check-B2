@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 
 import {
   type OutfitItem,
@@ -216,7 +216,6 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
           <div className="outfit-grid">
             {recommendation.options.map((outfit, index) => (
               <OutfitCard
-                activeAction={activeAction}
                 key={outfit.id}
                 outfit={outfit}
                 rank={index + 1}
@@ -243,17 +242,14 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
 }
 
 function OutfitCard({
-  activeAction,
   outfit,
   rank,
   onView,
 }: {
-  activeAction: ActiveAction;
   outfit: OutfitPlan;
   rank: number;
   onView: () => void;
 }) {
-  const saving = activeAction?.outfitId === outfit.id;
   return (
     <article className="outfit-card" onClick={onView}>
       <div className="outfit-card-meta">

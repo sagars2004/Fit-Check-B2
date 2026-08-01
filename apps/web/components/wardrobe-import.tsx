@@ -5,7 +5,6 @@ import { type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useS
 import {
   type Candidate,
   type CandidateReview,
-  type DemoWardrobeSeed,
   type DuplicateReview,
   type Garment,
   type GarmentUpdate,
@@ -16,7 +15,6 @@ import {
   getCandidates,
   getDuplicateReviews,
   getGarments,
-  getHealth,
   getEventSourceUrl,
   reviewCutout,
   reviewCandidate,
@@ -365,12 +363,7 @@ export function WardrobeImport() {
         {visibleGarments.map((garment) => (
           <GarmentCard
             garment={garment}
-            isCutoutSaving={activeCutout === garment.id || garment.cutouts.some((asset) => asset.id === activeCutout)}
-            isSaving={activeGarment === garment.id}
             key={garment.id}
-            onGenerateCutout={handleGenerateCutout}
-            onReviewCutout={handleCutoutReview}
-            onUpdate={handleGarmentUpdate}
             onView={() => setViewingGarmentId(garment.id)}
           />
         ))}
@@ -502,23 +495,12 @@ function CandidateCard({
 
 function GarmentCard({
   garment,
-  isSaving,
-  isCutoutSaving,
-  onGenerateCutout,
-  onReviewCutout,
-  onUpdate,
   onView,
 }: {
   garment: Garment;
-  isSaving: boolean;
-  isCutoutSaving: boolean;
-  onGenerateCutout: (garmentId: string) => Promise<void>;
-  onReviewCutout: (garmentId: string, assetId: string, action: "approve" | "reject") => Promise<void>;
-  onUpdate: (garmentId: string, update: GarmentUpdate) => Promise<void>;
   onView: () => void;
 }) {
   const latestCutout = garment.cutouts[0] ?? null;
-  const hasApprovedCutout = garment.cutouts.some((asset) => asset.qa_status === "approved");
 
   return (
     <article className="garment-card">

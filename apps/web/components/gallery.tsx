@@ -14,8 +14,8 @@ export function Gallery() {
         setLoading(true);
         const data = await getAllRenders(20);
         setRenders(data);
-      } catch (err: any) {
-        setError(err.message || "Failed to load renders");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Failed to load renders");
       } finally {
         setLoading(false);
       }
@@ -24,7 +24,7 @@ export function Gallery() {
   }, []);
 
   if (loading) {
-    return <div className="gallery-loading">Loading I'm Feeling Lucky Gallery...</div>;
+    return <div className="gallery-loading">Loading I&apos;m Feeling Lucky Gallery...</div>;
   }
 
   if (error) {

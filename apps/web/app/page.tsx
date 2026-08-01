@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { WardrobeImport } from "../components/wardrobe-import";
-import { TodayPlanner } from "../components/today-planner";
 import { TodayAndPreview } from "../components/today-and-preview";
 import { Gallery } from "../components/gallery";
 
@@ -106,7 +105,7 @@ export default function AppHome() {
           <section className="gallery-section">
             <header className="section-heading polished-heading">
               <div className="heading-content">
-                <h2>"I'm Feeling Lucky" Gallery</h2>
+                <h2>&ldquo;I&apos;m Feeling Lucky&rdquo; Gallery</h2>
                 <p className="workbench-copy">
                   A catalog of your past AI-generated previews. Hover over any look to see the exact wardrobe pieces that made it happen.
                 </p>
