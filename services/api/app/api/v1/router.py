@@ -4,11 +4,26 @@ from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, BackgroundTasks
 from fastapi.responses import Response, StreamingResponse
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, StorageMode
-from app.db.models import ProvenanceLink, User
+from app.db.models import (
+    DuplicateReview,
+    Garment,
+    GarmentAsset,
+    GarmentCandidate,
+    GarmentEvidence,
+    ImportJob,
+    ModelProfile,
+    OutfitItem,
+    OutfitPlan,
+    ProvenanceLink,
+    TryOnRender,
+    Upload,
+    User,
+    WearEvent,
+)
 from app.db.session import get_session
 from app.domain.schemas import (
     CandidateResponse,
@@ -445,14 +460,56 @@ async def delete_user_data(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
-    """Purge user data and private media per PRD privacy requirements."""
+    """Purge user data, uploaded images, garments, plans, and renders per PRD privacy requirements."""
 
     settings = _settings(request)
-    user = await session.scalar(select(User).where(User.id == settings.demo_user_id))
+    user_id = settings.demo_user_id
+    user = await session.scalar(select(User).where(User.id == user_id))
     if user is not None:
         user.reference_photo_consent_at = None
-        await session.commit()
-    return {"status": "success", "message": "User data purge completed."}
+
+    # Delete related dependent records
+    await session.execute(delete(WearEvent).where(WearEvent.user_id == user_id))
+    
+    # Delete outfit items and tryon renders for user's outfit plans
+    user_plan_ids = (
+        await session.scalars(select(OutfitPlan.id).where(OutfitPlan.user_id == user_id))
+    ).all()
+    if user_plan_ids:
+        await session.execute(delete(TryOnRender).where(TryOnRender.outfit_id.in_(user_plan_ids)))
+        await session.execute(delete(OutfitItem).where(OutfitItem.outfit_id.in_(user_plan_ids)))
+        await session.execute(delete(OutfitPlan).where(OutfitPlan.user_id == user_id))
+
+    # Delete garments, garment evidence, garment assets, duplicate reviews
+    user_garment_ids = (
+        await session.scalars(select(Garment.id).where(Garment.user_id == user_id))
+    ).all()
+    if user_garment_ids:
+        await session.execute(delete(GarmentEvidence).where(GarmentEvidence.garment_id.in_(user_garment_ids)))
+        await session.execute(delete(GarmentAsset).where(GarmentAsset.garment_id.in_(user_garment_ids)))
+        await session.execute(
+            delete(DuplicateReview).where(
+                (DuplicateReview.garment_a_id.in_(user_garment_ids))
+                | (DuplicateReview.garment_b_id.in_(user_garment_ids))
+            )
+        )
+        await session.execute(delete(Garment).where(Garment.user_id == user_id))
+
+    # Delete candidates, import jobs, and uploads
+    user_upload_ids = (
+        await session.scalars(select(Upload.id).where(Upload.user_id == user_id))
+    ).all()
+    if user_upload_ids:
+        await session.execute(
+            delete(GarmentCandidate).where(GarmentCandidate.upload_id.in_(user_upload_ids))
+        )
+        await session.execute(delete(Upload).where(Upload.user_id == user_id))
+
+    await session.execute(delete(ImportJob).where(ImportJob.user_id == user_id))
+    await session.execute(delete(ModelProfile).where(ModelProfile.user_id == user_id))
+    await session.commit()
+
+    return {"status": "success", "message": "All user data and wardrobe records purged successfully."}
 
 
 @router.post("/system/gmi-capability-smoke-test")
