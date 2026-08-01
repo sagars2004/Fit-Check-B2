@@ -25,17 +25,10 @@ def create_app(runtime_settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, Any]:
         logging.basicConfig(level=settings.log_level)
-        database = Database(settings)
         if settings.auto_create_schema:
-            await database.initialize()
-
-        app.state.settings = settings
-        app.state.database = database
-        app.state.storage = build_storage(settings)
-        app.state.orchestrator = build_media_orchestrator(settings)
-        app.state.weather = WeatherService(settings)
+            await app.state.database.initialize()
         yield
-        await database.dispose()
+        await app.state.database.dispose()
 
     application = FastAPI(
         title="Fit Check API",
@@ -43,6 +36,14 @@ def create_app(runtime_settings: Settings | None = None) -> FastAPI:
         description="Private wardrobe media orchestration, storage, and provenance.",
         lifespan=lifespan,
     )
+    
+    # Pre-populate state immediately on app creation for serverless reliability
+    application.state.settings = settings
+    application.state.database = Database(settings)
+    application.state.storage = build_storage(settings)
+    application.state.orchestrator = build_media_orchestrator(settings)
+    application.state.weather = WeatherService(settings)
+
     configured_origins = [o.strip() for o in settings.web_origin.split(",") if o.strip()]
     application.add_middleware(
         CORSMiddleware,

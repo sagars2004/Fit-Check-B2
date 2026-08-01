@@ -54,9 +54,12 @@ from app.domain.schemas import (
     WearEventResponse,
     WearRequest,
 )
+from app.core.config import Settings, StorageMode, get_settings
+from app.providers.factory import build_media_orchestrator
 from app.providers.gmi import GMICloudCapabilityClient
-from app.services.storage import LocalObjectStorage
+from app.services.storage import LocalObjectStorage, build_storage
 from app.services.task_queue import JobEvent, broadcaster
+from app.services.weather import WeatherService
 from app.workflows.milestone_four import MilestoneFourDemoWorkflow
 from app.workflows.milestone_one import MilestoneOneWorkflow
 from app.workflows.milestone_three import MilestoneThreeWorkflow
@@ -66,23 +69,36 @@ from app.workflows.milestone_zero import MilestoneZeroWorkflow
 router = APIRouter(prefix="/v1")
 
 
+def _ensure_app_state(request: Request) -> None:
+    if not hasattr(request.app.state, "settings") or request.app.state.settings is None:
+        settings = get_settings()
+        request.app.state.settings = settings
+        request.app.state.storage = build_storage(settings)
+        request.app.state.orchestrator = build_media_orchestrator(settings)
+        request.app.state.weather = WeatherService(settings)
+
+
 def _settings(request: Request) -> Settings:
+    _ensure_app_state(request)
     return cast(Settings, request.app.state.settings)
 
 
 def _milestone_one_workflow(request: Request) -> MilestoneOneWorkflow:
+    _ensure_app_state(request)
     return MilestoneOneWorkflow(
         request.app.state.settings, request.app.state.storage, request.app.state.orchestrator
     )
 
 
 def _milestone_two_workflow(request: Request) -> MilestoneTwoWorkflow:
+    _ensure_app_state(request)
     return MilestoneTwoWorkflow(
         request.app.state.settings, request.app.state.storage, request.app.state.weather
     )
 
 
 def _milestone_three_workflow(request: Request) -> MilestoneThreeWorkflow:
+    _ensure_app_state(request)
     return MilestoneThreeWorkflow(
         request.app.state.settings,
         request.app.state.storage,
@@ -91,6 +107,7 @@ def _milestone_three_workflow(request: Request) -> MilestoneThreeWorkflow:
 
 
 def _milestone_four_demo_workflow(request: Request) -> MilestoneFourDemoWorkflow:
+    _ensure_app_state(request)
     return MilestoneFourDemoWorkflow(request.app.state.settings, request.app.state.storage)
 
 

@@ -87,6 +87,13 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_live_mode(self) -> Settings:
+        import os
+        if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
+            if self.database_url.startswith("sqlite") and "/tmp" not in self.database_url:
+                self.database_url = "sqlite+aiosqlite:////tmp/fit_check.db"
+            if not str(self.local_media_root).startswith("/tmp"):
+                self.local_media_root = Path("/tmp/local-media")
+
         if self.provider_mode is ProviderMode.LIVE:
             missing = []
             if self.gmi_api_key is None:
