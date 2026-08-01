@@ -5,7 +5,8 @@
       "framework": "nextjs"
     },
     "api": {
-      "root": "services/api"
+      "root": "services/api",
+      "entrypoint": "app/main.py"
     }
   },
   "rewrites": [
