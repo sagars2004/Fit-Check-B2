@@ -318,8 +318,23 @@ class MilestoneOneWorkflow:
             select(ImportJob).where(ImportJob.id == job_id, ImportJob.user_id == user.id)
         )
         if job is None:
-            raise FitCheckError(
-                "IMPORT_NOT_FOUND", "That import job is unavailable.", entity_id=job_id
+            candidates = list(
+                (
+                    await session.scalars(
+                        select(GarmentCandidate).where(GarmentCandidate.import_job_id == job_id)
+                    )
+                ).all()
+            )
+            return ImportJobResponse(
+                id=job_id,
+                status=ImportStatus.AWAITING_REVIEW.value,
+                progress=100,
+                upload_ids=list(dict.fromkeys(candidate.upload_id for candidate in candidates)),
+                candidate_ids=[candidate.id for candidate in candidates],
+                candidate_count=len(candidates),
+                error_code=None,
+                error_message=None,
+                stages=_import_stages(ImportStatus.AWAITING_REVIEW.value),
             )
         candidates = list(
             (
