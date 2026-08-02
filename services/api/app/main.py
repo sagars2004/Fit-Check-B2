@@ -44,13 +44,11 @@ def create_app(runtime_settings: Settings | None = None) -> FastAPI:
     application.state.orchestrator = build_media_orchestrator(settings)
     application.state.weather = WeatherService(settings)
 
-    configured_origins = [o.strip() for o in settings.web_origin.split(",") if o.strip()]
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=configured_origins or ["*"],
-        allow_origin_regex=r"^https://.*\.vercel\.app$",
-        allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
         allow_headers=["*"],
     )
 
