@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 
 from fastapi import Request
 from sqlalchemy.engine import make_url
@@ -37,6 +38,44 @@ class Database:
     def session(self) -> AsyncSession:
         return self.session_factory()
 
+    async def pull_backup(self, storage: Any) -> None:
+        """Sync SQLite state from storage when running in stateless serverless environments."""
+        try:
+            url = make_url(self.settings.database_url)
+            if (
+                not url.drivername.startswith("sqlite")
+                or not url.database
+                or url.database == ":memory:"
+            ):
+                return
+            db_path = Path(url.database).expanduser()
+            key = f"{self.settings.b2_prefix}/db/fit_check.db"
+            head = await storage.head(key)
+            if not db_path.exists() or db_path.stat().st_size != head.size:
+                content = await storage.get_bytes(key)
+                db_path.parent.mkdir(parents=True, exist_ok=True)
+                db_path.write_bytes(content)
+        except Exception:
+            pass
+
+    async def push_backup(self, storage: Any) -> None:
+        """Persist SQLite state to storage when running in stateless serverless environments."""
+        try:
+            url = make_url(self.settings.database_url)
+            if (
+                not url.drivername.startswith("sqlite")
+                or not url.database
+                or url.database == ":memory:"
+            ):
+                return
+            db_path = Path(url.database).expanduser()
+            if db_path.exists() and db_path.stat().st_size > 0:
+                key = f"{self.settings.b2_prefix}/db/fit_check.db"
+                content = db_path.read_bytes()
+                await storage.put_bytes(key, content, content_type="application/x-sqlite3")
+        except Exception:
+            pass
+
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
     database: Database | None = getattr(request.app.state, "database", None)
@@ -45,11 +84,18 @@ async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
         database = Database(settings)
         request.app.state.database = database
 
+    storage = getattr(request.app.state, "storage", None)
+    if storage is not None:
+        await database.pull_backup(storage)
+
     if not database._initialized and database.settings.auto_create_schema:
         await database.initialize()
 
     async with database.session() as session:
         yield session
+
+    if storage is not None and request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        await database.push_backup(storage)
 
 
 def _ensure_sqlite_parent_directory(database_url: str) -> None:
