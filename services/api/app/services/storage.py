@@ -253,34 +253,49 @@ class B2ObjectStorage:
         await asyncio.to_thread(self.client.delete_object, Bucket=self.bucket, Key=key)
 
     async def signed_read_url(self, key: str, expires_seconds: int | None = None) -> str:
+        expiry = expires_seconds or self.default_expiry
+        if expiry > 86400:
+            expiry = 86400
         try:
             return await asyncio.to_thread(
                 self.client.generate_presigned_url,
                 "get_object",
                 Params={"Bucket": self.bucket, "Key": key},
-                ExpiresIn=expires_seconds or self.default_expiry,
+                ExpiresIn=expiry,
             )
-        except Exception as ex:
-            raise FitCheckError(
-                "B2_PRESIGN_FAILED",
-                f"Failed to generate secure read URL: {ex}",
-            ) from ex
+        except Exception:
+            try:
+                return await asyncio.to_thread(
+                    self.client.generate_presigned_url,
+                    "get_object",
+                    Params={"Bucket": self.bucket, "Key": key},
+                    ExpiresIn=3600,
+                )
+            except Exception as ex:
+                raise FitCheckError(
+                    "B2_PRESIGN_FAILED",
+                    f"Failed to generate secure read URL: {ex}",
+                ) from ex
 
     async def signed_upload_url(
         self, key: str, content_type: str, expires_seconds: int | None = None
     ) -> str:
+        expiry = expires_seconds or self.default_expiry
+        if expiry > 86400:
+            expiry = 86400
         try:
             return await asyncio.to_thread(
                 self.client.generate_presigned_url,
                 "put_object",
                 Params={"Bucket": self.bucket, "Key": key, "ContentType": content_type},
-                ExpiresIn=expires_seconds or self.default_expiry,
+                ExpiresIn=expiry,
             )
         except Exception as ex:
             raise FitCheckError(
                 "B2_PRESIGN_FAILED",
                 f"Failed to generate secure upload target: {ex}",
             ) from ex
+
 
 
 def build_storage(settings: Settings) -> ObjectStorage:
