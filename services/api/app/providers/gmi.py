@@ -188,7 +188,9 @@ class GenblazeGMICloudOrchestrator:
         if request.source_urls:
             step_kwargs["image"] = list(request.source_urls)
 
-        pipeline = Pipeline(request.pipeline_slug, tenant_id=request.tenant_id).step(provider, **step_kwargs)
+        pipeline = Pipeline(request.pipeline_slug, tenant_id=request.tenant_id).step(
+            provider, **step_kwargs
+        )
         try:
             result = pipeline.run(sink=sink, timeout=self.settings.gmi_generation_timeout_seconds)
         except Exception as error:
@@ -207,18 +209,19 @@ class GenblazeGMICloudOrchestrator:
                 correlation_id=str(getattr(run, "run_id", "")) or None,
             )
         asset = step.assets[0]
-        
+
         object_key = getattr(asset, "metadata", {}).get("object_key")
         if not object_key and getattr(asset, "url", None):
             from urllib.parse import urlparse
+
             parsed = urlparse(asset.url)
             path = parsed.path.lstrip("/")
             # If the URL is a B2 URL, it might include the bucket name in the path
             if b2_bucket and path.startswith(f"{b2_bucket}/"):
-                object_key = path[len(f"{b2_bucket}/"):]
+                object_key = path[len(f"{b2_bucket}/") :]
             else:
                 object_key = path
-            
+
         if not object_key:
             raise FitCheckError(
                 "PROVIDER_GENERATION_FAILED",
@@ -228,11 +231,15 @@ class GenblazeGMICloudOrchestrator:
             )
 
         return GeneratedMedia(
-            run_id=str(getattr(run, "run_id", None) or getattr(getattr(manifest, "run", None), "run_id", "")),
+            run_id=str(
+                getattr(run, "run_id", None)
+                or getattr(getattr(manifest, "run", None), "run_id", "")
+            ),
             provider="gmicloud",
             model=model,
             content=None,
-            content_type=getattr(asset, "content_type", None) or getattr(asset, "media_type", "image/png"),
+            content_type=getattr(asset, "content_type", None)
+            or getattr(asset, "media_type", "image/png"),
             source_asset_url=getattr(asset, "url", None),
             object_key=object_key,
             sha256=getattr(asset, "sha256", None),

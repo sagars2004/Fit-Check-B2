@@ -56,7 +56,11 @@ def _ensure_sqlite_parent_directory(database_url: str) -> None:
     """Make the default local SQLite URL work from any API working directory."""
     try:
         url = make_url(database_url)
-        if not url.drivername.startswith("sqlite") or not url.database or url.database == ":memory:":
+        if (
+            not url.drivername.startswith("sqlite")
+            or not url.database
+            or url.database == ":memory:"
+        ):
             return
         Path(url.database).expanduser().parent.mkdir(parents=True, exist_ok=True)
     except Exception:

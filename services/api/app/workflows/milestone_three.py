@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -303,12 +302,12 @@ class MilestoneThreeWorkflow:
             render.provider = generated.provider
             render.model = generated.model
             outfit.status = OutfitStatus.PREVIEW_READY.value
-            
+
             if generated.object_key:
                 # Native Genblaze output (Live Mode)
                 render.object_key = generated.object_key
                 render.sha256 = generated.sha256
-                
+
                 redacted_manifest = generated.provider_manifest
                 redacted_manifest["qa"] = {
                     "status": "decoded",
@@ -318,7 +317,10 @@ class MilestoneThreeWorkflow:
                 }
                 import hashlib
                 import json
-                manifest_payload = json.dumps(redacted_manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+                manifest_payload = json.dumps(
+                    redacted_manifest, sort_keys=True, separators=(",", ":")
+                ).encode("utf-8")
                 manifest_hash = hashlib.sha256(manifest_payload).hexdigest()
                 manifest_key = f"genblaze/manifests/{generated.run_id}.json"
             elif generated.content:
@@ -339,7 +341,7 @@ class MilestoneThreeWorkflow:
                 )
                 render.object_key = object_key
                 render.sha256 = stored.sha256
-                
+
                 manifest = self._success_manifest(
                     render=render,
                     outfit=outfit,
@@ -353,7 +355,9 @@ class MilestoneThreeWorkflow:
                     content_type=inspection.content_type,
                     output_size=stored.size,
                 )
-                manifest_key, manifest_hash = await persist_manifest(self.storage, self.keys, manifest)
+                manifest_key, manifest_hash = await persist_manifest(
+                    self.storage, self.keys, manifest
+                )
                 redacted_manifest = manifest.owner_view()
             else:
                 raise FitCheckError(
@@ -363,7 +367,7 @@ class MilestoneThreeWorkflow:
                     entity_id=render.id,
                     correlation_id=generated.run_id,
                 )
-            
+
             session.add(
                 ProvenanceLink(
                     entity_type="tryon_render",
@@ -426,10 +430,7 @@ class MilestoneThreeWorkflow:
                 await session.scalars(
                     select(TryOnRender)
                     .join(OutfitPlan, TryOnRender.outfit_id == OutfitPlan.id)
-                    .where(
-                        OutfitPlan.user_id == user.id,
-                        TryOnRender.status == "preview_ready"
-                    )
+                    .where(OutfitPlan.user_id == user.id, TryOnRender.status == "preview_ready")
                     .order_by(TryOnRender.created_at.desc())
                     .limit(limit)
                 )
@@ -934,10 +935,12 @@ class MilestoneThreeWorkflow:
         return "mock" if self.settings.provider_mode is ProviderMode.MOCK else "gmicloud"
 
     def _tryon_prompt(self, correction_hint: str | None, sources: list[_RenderSource]) -> str:
-        garment_descriptions = ", ".join([
-            f"{' '.join(s.garment.colors)} {s.garment.name} ({s.garment.category})"
-            for s in sources
-        ])
+        garment_descriptions = ", ".join(
+            [
+                f"{' '.join(s.garment.colors)} {s.garment.name} ({s.garment.category})"
+                for s in sources
+            ]
+        )
         correction_instruction = (
             " Apply this user-requested correction while preserving source evidence: "
             f"{correction_hint.strip()}"
@@ -945,9 +948,12 @@ class MilestoneThreeWorkflow:
             else ""
         )
         return (
-            f"Create one AI visualization of the consented reference person wearing the following garments: {garment_descriptions}. "
-            "Preserve only source-supported garment features. Do not claim precise size, fit, fabric drape, or body shape. "
-            "Avoid inventing additional garments, accessories, background details, or sensitive traits."
+            "Create one AI visualization of the consented reference person wearing the "
+            f"following garments: {garment_descriptions}. "
+            "Preserve only source-supported garment features. Do not claim precise size, "
+            "fit, fabric drape, or body shape. "
+            "Avoid inventing additional garments, accessories, background details, "
+            "or sensitive traits."
             f"{correction_instruction}"
         )
 

@@ -364,4 +364,3 @@ async def test_live_tryon_is_gated_before_reference_urls_can_reach_a_provider(tm
             assert renders.status_code == 200
             assert renders.json()[0]["status"] == "failed"
             assert renders.json()[0]["provider"] == "gmicloud"
-

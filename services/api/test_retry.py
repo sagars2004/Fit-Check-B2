@@ -1,8 +1,11 @@
 import asyncio
+
+import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential
+
 from app.core.config import Settings
 from app.services.vision import extract_garments_with_vision
-import httpx
-from tenacity import retry, wait_exponential, stop_after_attempt
+
 
 @retry(wait=wait_exponential(multiplier=1, min=2, max=10), stop=stop_after_attempt(5))
 async def call_gmi(settings):
@@ -15,12 +18,14 @@ async def call_gmi(settings):
         raise Exception("Failed")
     return res
 
+
 async def main():
     settings = Settings()
     try:
         res = await call_gmi(settings)
         print("Success:", res)
-    except Exception as e:
+    except Exception:
         print("Final failure")
+
 
 asyncio.run(main())

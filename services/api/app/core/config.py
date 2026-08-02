@@ -88,6 +88,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_live_mode(self) -> Settings:
         import os
+
         if os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"):
             if self.database_url.startswith("sqlite") and "/tmp" not in self.database_url:
                 self.database_url = "sqlite+aiosqlite:////tmp/fit_check.db"

@@ -3,13 +3,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
+from fastapi import BackgroundTasks
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from fastapi import BackgroundTasks
-
-from app.db.session import Database
 
 from app.core.config import ProviderMode, Settings, StorageMode
 from app.core.errors import FitCheckError
@@ -25,6 +23,7 @@ from app.db.models import (
     User,
     new_id,
 )
+from app.db.session import Database
 from app.domain.enums import AssetEvidenceStatus, GarmentStatus, ImportStatus
 from app.domain.schemas import (
     CandidateResponse,
@@ -159,13 +158,20 @@ class MilestoneOneWorkflow:
         return await self._finalize_upload(session, upload_id, content, persist_original=True)
 
     async def create_import(
-        self, session: AsyncSession, upload_ids: list[str], background_tasks: BackgroundTasks, database: Database
+        self,
+        session: AsyncSession,
+        upload_ids: list[str],
+        background_tasks: BackgroundTasks,
+        database: Database,
     ) -> ImportJobResponse:
         user = await self._ensure_demo_user(session)
         resolved_uploads: list[Upload] = []
         for upload_id in dict.fromkeys(upload_ids):
             upload = await self._load_owned_upload(session, user.id, upload_id)
-            if upload.status == "pending_upload" and self.settings.storage_mode is StorageMode.LOCAL:
+            if (
+                upload.status == "pending_upload"
+                and self.settings.storage_mode is StorageMode.LOCAL
+            ):
                 raise FitCheckError(
                     "UPLOAD_NOT_COMPLETE",
                     "Finish saving this photo before starting its import.",
@@ -226,23 +232,30 @@ class MilestoneOneWorkflow:
             stages=_import_stages(job.status),
         )
 
-    async def _process_import_job(self, database: Database, job_id: str, upload_ids: list[str]) -> None:
+    async def _process_import_job(
+        self, database: Database, job_id: str, upload_ids: list[str]
+    ) -> None:
         async with database.session() as session:
             job = await session.scalar(select(ImportJob).where(ImportJob.id == job_id))
             if not job:
                 return
             user = await self._ensure_demo_user(session)
-            
+
             resolved_uploads: list[Upload] = []
             for uid in upload_ids:
                 upload = await self._load_owned_upload(session, user.id, uid)
-                if upload.status == "pending_upload" and self.settings.storage_mode is not StorageMode.LOCAL:
+                if (
+                    upload.status == "pending_upload"
+                    and self.settings.storage_mode is not StorageMode.LOCAL
+                ):
                     try:
                         content = await self.storage.get_bytes(upload.original_key)
                         finalized = await self._finalize_upload(
                             session, upload.id, content, persist_original=False
                         )
-                        upload = await self._load_owned_upload(session, user.id, finalized.upload_id)
+                        upload = await self._load_owned_upload(
+                            session, user.id, finalized.upload_id
+                        )
                     except Exception as ex:
                         print(f"Failed to finalize upload {upload.id}: {ex}")
                 resolved_uploads.append(upload)
@@ -454,16 +467,16 @@ class MilestoneOneWorkflow:
         version = (previous_asset.version if previous_asset is not None else 0) + 1
         parent_run_id = previous_asset.run_id if previous_asset is not None else None
         source = await self.storage.get_bytes(evidence.crop_key)
-        
+
         asset_id = new_id()
         if self.settings.provider_mode is ProviderMode.MOCK:
             output = chroma_to_transparent(source)
             run_id = f"local-cutout-{new_id()}"
             provider = "local"
             model = "deterministic-chroma-key/v1"
-            
+
             qa = validate_cutout_png(output)
-            
+
             object_key = self.keys.garment_cutout(user.id, garment.id, version)
             stored = await self.storage.put_bytes(
                 object_key,
@@ -485,7 +498,7 @@ class MilestoneOneWorkflow:
                     entity_id=garment.id,
                     correlation_id=run_id,
                 )
-            
+
             content_type = "image/png"
             asset_sha256 = stored.sha256
             manifest = MediaProvenanceManifest(
@@ -523,7 +536,9 @@ class MilestoneOneWorkflow:
                     "status": "awaiting_review" if qa.passed else "failed",
                     "warnings": list(qa.warnings),
                     "review_required": qa.passed,
-                    "evidence_status": "verified_source_backed" if qa.passed else "needs_better_photo",
+                    "evidence_status": "verified_source_backed"
+                    if qa.passed
+                    else "needs_better_photo",
                 },
             )
             manifest_key, manifest_hash = await persist_manifest(self.storage, self.keys, manifest)
@@ -534,13 +549,15 @@ class MilestoneOneWorkflow:
                     "GMI_MODEL_UNCONFIGURED",
                     "A valid GMI image model must be configured for live cutouts.",
                 )
-            
+
             prompt = (
-                "Perform background removal ONLY. Keep the garment EXACTLY as it appears in the original image. "
+                "Perform background removal ONLY. Keep the garment EXACTLY as it appears "
+                "in the original image. "
                 "Do NOT alter colors, shape, or texture. Do NOT generate new details. "
-                "Only erase the background, wearer, skin, and props, leaving the background transparent."
+                "Only erase the background, wearer, skin, and props, leaving the "
+                "background transparent."
             )
-            
+
             request = ImageGenerationRequest(
                 pipeline_slug="fit-check-m1-cutout",
                 tenant_id=user.id,
@@ -555,7 +572,7 @@ class MilestoneOneWorkflow:
                 parameters={
                     "purpose": "catalog_cutout",
                     "output": "image/png",
-                }
+                },
             )
             generated = await self.orchestrator.generate_image(request)
             if not generated.object_key:
@@ -566,18 +583,18 @@ class MilestoneOneWorkflow:
                     entity_id=garment.id,
                     correlation_id=generated.run_id,
                 )
-            
+
             # Fetch the generated bytes from B2 to run QA checks
             output = await self.storage.get_bytes(generated.object_key)
             qa = validate_cutout_png(output)
-            
+
             run_id = generated.run_id
             provider = generated.provider
             model = generated.model
             object_key = generated.object_key
             content_type = generated.content_type
             asset_sha256 = generated.sha256
-            
+
             # Trust Genblaze manifest
             redacted_manifest = generated.provider_manifest
             redacted_manifest["qa"] = {
@@ -588,7 +605,10 @@ class MilestoneOneWorkflow:
             }
             import hashlib
             import json
-            payload = json.dumps(redacted_manifest, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+            payload = json.dumps(redacted_manifest, sort_keys=True, separators=(",", ":")).encode(
+                "utf-8"
+            )
             manifest_hash = hashlib.sha256(payload).hexdigest()
             manifest_key = f"genblaze/manifests/{generated.run_id}.json"
 
@@ -966,9 +986,8 @@ class MilestoneOneWorkflow:
                         "source_crop_sha256": crop_stored.sha256,
                         "source_fingerprint": perceptual_input_fingerprint(crop),
                     },
-                    unresolved_details=g.unresolved_details or [
-                        "Confirm the garment boundary before creating a catalog cutout."
-                    ],
+                    unresolved_details=g.unresolved_details
+                    or ["Confirm the garment boundary before creating a catalog cutout."],
                     confidence=g.confidence,
                     status="awaiting_review",
                     source_crop_key=source_crop_key,

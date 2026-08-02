@@ -406,14 +406,14 @@ def _build_outfits(
             )
 
     import random
-    
+
     options.sort(
         key=lambda option: (-option.score, tuple(garment.id for _, garment in option.items))
     )
-    
+
     top_options = options[:20]
     random.shuffle(top_options)
-    
+
     selected: list[_PlannedOutfit] = []
     for option in top_options:
         if any(option.primary_ids == existing.primary_ids for existing in selected):
@@ -421,7 +421,7 @@ def _build_outfits(
         selected.append(option)
         if len(selected) == 3:
             break
-            
+
     if len(selected) < 3:
         for option in options:
             if any(option.primary_ids == existing.primary_ids for existing in selected):

@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings, StorageMode
+from app.core.config import Settings, StorageMode, get_settings
 from app.db.models import (
     DuplicateReview,
     Garment,
@@ -54,7 +54,6 @@ from app.domain.schemas import (
     WearEventResponse,
     WearRequest,
 )
-from app.core.config import Settings, StorageMode, get_settings
 from app.providers.factory import build_media_orchestrator
 from app.providers.gmi import GMICloudCapabilityClient
 from app.services.storage import LocalObjectStorage, build_storage
@@ -211,14 +210,13 @@ async def get_import(
 
 @router.get("/imports/{import_id}/events")
 async def stream_import_events(
-    import_id: str,
-    request: Request,
-    session: AsyncSession = Depends(get_session)
+    import_id: str, request: Request, session: AsyncSession = Depends(get_session)
 ) -> StreamingResponse:
     """Stream real-time Server-Sent Events (SSE) for import job progress."""
 
     async def event_generator():
         from app.core.errors import FitCheckError
+
         try:
             job = await _milestone_one_workflow(request).get_import(session, import_id)
             if job.progress >= 100 or job.status in ("complete", "failed", "awaiting_review"):
@@ -477,7 +475,8 @@ async def delete_user_data(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
-    """Purge user data, uploaded images, garments, plans, and renders per PRD privacy requirements."""
+    """Purge user data, uploaded images, garments, plans, and renders
+    per PRD privacy requirements."""
 
     settings = _settings(request)
     user_id = settings.demo_user_id
@@ -487,7 +486,7 @@ async def delete_user_data(
 
     # Delete related dependent records
     await session.execute(delete(WearEvent).where(WearEvent.user_id == user_id))
-    
+
     # Delete outfit items and tryon renders for user's outfit plans
     user_plan_ids = (
         await session.scalars(select(OutfitPlan.id).where(OutfitPlan.user_id == user_id))
@@ -502,8 +501,12 @@ async def delete_user_data(
         await session.scalars(select(Garment.id).where(Garment.user_id == user_id))
     ).all()
     if user_garment_ids:
-        await session.execute(delete(GarmentEvidence).where(GarmentEvidence.garment_id.in_(user_garment_ids)))
-        await session.execute(delete(GarmentAsset).where(GarmentAsset.garment_id.in_(user_garment_ids)))
+        await session.execute(
+            delete(GarmentEvidence).where(GarmentEvidence.garment_id.in_(user_garment_ids))
+        )
+        await session.execute(
+            delete(GarmentAsset).where(GarmentAsset.garment_id.in_(user_garment_ids))
+        )
         await session.execute(
             delete(DuplicateReview).where(
                 (DuplicateReview.garment_a_id.in_(user_garment_ids))
@@ -526,7 +529,10 @@ async def delete_user_data(
     await session.execute(delete(ModelProfile).where(ModelProfile.user_id == user_id))
     await session.commit()
 
-    return {"status": "success", "message": "All user data and wardrobe records purged successfully."}
+    return {
+        "status": "success",
+        "message": "All user data and wardrobe records purged successfully.",
+    }
 
 
 @router.post("/system/gmi-capability-smoke-test")

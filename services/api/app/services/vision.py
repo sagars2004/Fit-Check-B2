@@ -51,9 +51,11 @@ async def extract_garments_with_vision(
         "Focus on accurate classification of the clothing type and precise color extraction. "
         "Return ONLY a JSON object with key 'garments' containing an array of objects. "
         "Each object must have:\n"
-        "- name_suggestion: string (Be highly descriptive of the exact type, e.g. 'Slim-Fit Denim Jeans' instead of 'pants')\n"
+        "- name_suggestion: string (Be highly descriptive of the exact type, "
+        "e.g. 'Slim-Fit Denim Jeans' instead of 'pants')\n"
         "- category: string ('top', 'bottom', 'outerwear', 'footwear', 'dress', 'accessory')\n"
-        "- colors: array of strings (Extract the exact primary and secondary colors as they appear in the photo)\n"
+        "- colors: array of strings (Extract the exact primary and secondary colors "
+        "as they appear in the photo)\n"
         "- bbox: object with keys 'left', 'top', 'right', 'bottom' in pixel coordinates "
         "(0 to width, 0 to height)\n"
         "- apparent_material: string\n"
@@ -116,14 +118,13 @@ async def extract_garments_with_vision(
                         apparent_material=str(item.get("apparent_material", "needs review")),
                         pattern=str(item.get("pattern", "needs review")),
                         confidence=float(item.get("confidence", 0.8)),
-                        unresolved_details=[
-                            str(u) for u in item.get("unresolved_details", [])
-                        ],
+                        unresolved_details=[str(u) for u in item.get("unresolved_details", [])],
                     )
                 )
             return results
     except Exception as e:
         import traceback
+
         traceback.print_exc()
         print(f"GMI Vision API Exception: {e}")
         return []

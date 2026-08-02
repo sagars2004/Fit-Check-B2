@@ -36,7 +36,7 @@ def create_app(runtime_settings: Settings | None = None) -> FastAPI:
         description="Private wardrobe media orchestration, storage, and provenance.",
         lifespan=lifespan,
     )
-    
+
     # Pre-populate state immediately on app creation for serverless reliability
     application.state.settings = settings
     application.state.database = Database(settings)
