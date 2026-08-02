@@ -230,11 +230,12 @@ class B2ObjectStorage:
         def read_head() -> StoredObject:
             try:
                 response = self.client.head_object(Bucket=self.bucket, Key=key)
-            except self.client.exceptions.ClientError as error:
+            except Exception as error:
                 raise FitCheckError(
-                    "OBJECT_NOT_FOUND", "The requested asset is unavailable."
+                    "OBJECT_NOT_FOUND", f"The asset '{key}' is unavailable."
                 ) from error
             metadata = response.get("Metadata", {})
+
             return StoredObject(
                 key=key,
                 sha256=metadata.get("sha256", ""),
