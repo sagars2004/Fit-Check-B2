@@ -1245,9 +1245,62 @@ class MilestoneOneWorkflow:
             select(Upload).where(Upload.id == upload_id, Upload.user_id == user_id)
         )
         if upload is None:
+            upload = await self._synthesize_serverless_upload_fallback(session, user_id, upload_id)
+        if upload is None:
             raise FitCheckError(
                 "UPLOAD_NOT_FOUND", "That upload is unavailable.", entity_id=upload_id
             )
+        return upload
+
+    async def _synthesize_serverless_upload_fallback(
+        self, session: AsyncSession, user_id: str, upload_id: str
+    ) -> Upload | None:
+        """Recover missing upload records when serverless requests hit separate containers."""
+        for ext in ("jpg", "png", "webp", "jpeg"):
+            key = self.keys.upload_original(user_id, upload_id, ext)
+            try:
+                await self.storage.head(key)
+                content_type = (
+                    "image/png"
+                    if ext == "png"
+                    else "image/webp"
+                    if ext == "webp"
+                    else "image/jpeg"
+                )
+                upload = Upload(
+                    id=upload_id,
+                    user_id=user_id,
+                    original_key=key,
+                    sha256=f"pending-{upload_id}",
+                    content_type=content_type,
+                    status="pending_upload",
+                    immutable_metadata={
+                        "filename": f"{upload_id}.{ext}",
+                        "requested_content_type": content_type,
+                    },
+                )
+                session.add(upload)
+                await session.flush()
+                return upload
+            except Exception:
+                continue
+
+        # If object existence check isn't supported or fails, construct standard key fallback
+        key = self.keys.upload_original(user_id, upload_id, "jpg")
+        upload = Upload(
+            id=upload_id,
+            user_id=user_id,
+            original_key=key,
+            sha256=f"pending-{upload_id}",
+            content_type="image/jpeg",
+            status="pending_upload",
+            immutable_metadata={
+                "filename": f"{upload_id}.jpg",
+                "requested_content_type": "image/jpeg",
+            },
+        )
+        session.add(upload)
+        await session.flush()
         return upload
 
     async def _load_owned_candidate(

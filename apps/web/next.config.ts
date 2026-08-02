@@ -6,8 +6,13 @@ const nextConfig: NextConfig = {
     const apiBase =
       process.env.NEXT_PUBLIC_API_BASE_URL ||
       (process.env.VERCEL || process.env.VERCEL_ENV
-        ? "https://fit-check-b2-api.vercel.app"
+        ? ""
         : "http://localhost:8000");
+
+    if (!apiBase) {
+      return [];
+    }
+
     return [
       {
         source: "/v1/:path*",
