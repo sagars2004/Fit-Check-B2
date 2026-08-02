@@ -82,27 +82,50 @@ export function WardrobeImport() {
   useEffect(() => {
     if (!importJob?.id || importJob.progress >= 100) return;
     const sseUrl = getEventSourceUrl(`/v1/imports/${importJob.id}/events`);
-    const source = new EventSource(sseUrl);
-    source.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (typeof payload.progress === "number") {
-          setImportJob((prev) =>
-            prev ? { ...prev, progress: payload.progress, status: payload.stage ?? prev.status } : prev
-          );
+    let source: EventSource | null = null;
+    try {
+      source = new EventSource(sseUrl);
+      source.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (typeof payload.progress === "number") {
+            setImportJob((prev) =>
+              prev ? { ...prev, progress: payload.progress, status: payload.stage ?? prev.status } : prev
+            );
+          }
+          if (payload.progress >= 100 || payload.stage === "complete" || payload.stage === "awaiting_review") {
+            source?.close();
+            void refresh();
+          }
+        } catch {
+          // Safe JSON parse error handling
         }
-        if (payload.progress >= 100 || payload.stage === "complete" || payload.stage === "awaiting_review") {
-          source.close();
+      };
+      source.onerror = () => {
+        source?.close();
+      };
+    } catch {
+      // ignore
+    }
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const current = await getImport(importJob.id);
+        setImportJob(current);
+        if (current.progress >= 100 || current.status === "awaiting_review" || current.status === "complete" || current.status === "failed") {
+          clearInterval(pollInterval);
+          source?.close();
           void refresh();
         }
       } catch {
-        // Safe JSON parse error handling
+        // Safe polling ignore
       }
+    }, 2000);
+
+    return () => {
+      clearInterval(pollInterval);
+      source?.close();
     };
-    source.onerror = (err) => {
-      console.error("EventSource failed:", err);
-    };
-    return () => source.close();
   }, [importJob?.id, refresh]);
 
   async function handleUpload(event: FormEvent<HTMLFormElement>) {

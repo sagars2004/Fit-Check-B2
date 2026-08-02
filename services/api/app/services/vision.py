@@ -79,7 +79,7 @@ async def extract_garments_with_vision(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(endpoint, headers=headers, json=body)
             if resp.status_code != 200:
                 print(f"GMI Vision API Error {resp.status_code}: {resp.text}")

@@ -338,7 +338,7 @@ export async function uploadPhotos(files: File[]): Promise<{ uploads: UploadResu
   const uploads: UploadResult[] = [];
   const errors: string[] = [];
 
-  for (const file of files) {
+  const uploadSingle = async (file: File) => {
     try {
       const target = await requestJson<UploadTarget>("/v1/uploads/presign", {
         method: "POST",
@@ -360,8 +360,6 @@ export async function uploadPhotos(files: File[]): Promise<{ uploads: UploadResu
       if (target.mode === "api_proxy") {
         uploads.push((await response.json()) as UploadResult);
       } else {
-        // The API validates the private B2 object and computes its SHA-256 when
-        // the import is created. The browser does not need B2 credentials.
         uploads.push({
           upload_id: target.upload_id,
           status: "pending_validation",
@@ -376,7 +374,15 @@ export async function uploadPhotos(files: File[]): Promise<{ uploads: UploadResu
     } catch (caught: unknown) {
       errors.push(`${file.name}: ${caught instanceof Error ? caught.message : "Upload failed."}`);
     }
+  };
+
+  // Process in concurrent batches of 4
+  const batchSize = 4;
+  for (let i = 0; i < files.length; i += batchSize) {
+    const batch = files.slice(i, i + batchSize);
+    await Promise.all(batch.map(uploadSingle));
   }
+
   return { uploads, errors };
 }
 

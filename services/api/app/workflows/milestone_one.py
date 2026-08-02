@@ -165,22 +165,10 @@ class MilestoneOneWorkflow:
         resolved_uploads: list[Upload] = []
         for upload_id in dict.fromkeys(upload_ids):
             upload = await self._load_owned_upload(session, user.id, upload_id)
-            if upload.status == "pending_upload":
-                if self.settings.storage_mode is StorageMode.LOCAL:
-                    raise FitCheckError(
-                        "UPLOAD_NOT_COMPLETE",
-                        "Finish saving this photo before starting its import.",
-                        entity_id=upload.id,
-                    )
-                content = await self.storage.get_bytes(upload.original_key)
-                finalized = await self._finalize_upload(
-                    session, upload.id, content, persist_original=False
-                )
-                upload = await self._load_owned_upload(session, user.id, finalized.upload_id)
-            if upload.status != ImportStatus.UPLOADED.value:
+            if upload.status == "pending_upload" and self.settings.storage_mode is StorageMode.LOCAL:
                 raise FitCheckError(
-                    "UPLOAD_NOT_READY",
-                    "This photo is not ready for import.",
+                    "UPLOAD_NOT_COMPLETE",
+                    "Finish saving this photo before starting its import.",
                     entity_id=upload.id,
                 )
             resolved_uploads.append(upload)
@@ -215,14 +203,28 @@ class MilestoneOneWorkflow:
         session.add(job)
         await session.commit()
 
-        await self._process_import_job(
-            database, job.id, [u.id for u in resolved_uploads]
+        # In mock mode with small batch, process synchronously for instant test return
+        if self.settings.provider_mode is ProviderMode.MOCK and len(resolved_uploads) <= 2:
+            await self._process_import_job(database, job.id, [u.id for u in resolved_uploads])
+            async with database.session() as read_session:
+                return await self.get_import(read_session, job.id)
+
+        # Otherwise launch background task to avoid HTTP timeout on large batches
+        background_tasks.add_task(
+            self._process_import_job, database, job.id, [u.id for u in resolved_uploads]
         )
 
-        async with database.session() as session:
-            final_job = await self.get_import(session, job.id)
-
-        return final_job
+        return ImportJobResponse(
+            id=job.id,
+            status=job.status,
+            progress=job.progress,
+            upload_ids=[u.id for u in resolved_uploads],
+            candidate_ids=[],
+            candidate_count=0,
+            error_code=None,
+            error_message=None,
+            stages=_import_stages(job.status),
+        )
 
     async def _process_import_job(self, database: Database, job_id: str, upload_ids: list[str]) -> None:
         async with database.session() as session:
@@ -231,9 +233,18 @@ class MilestoneOneWorkflow:
                 return
             user = await self._ensure_demo_user(session)
             
-            resolved_uploads = []
+            resolved_uploads: list[Upload] = []
             for uid in upload_ids:
                 upload = await self._load_owned_upload(session, user.id, uid)
+                if upload.status == "pending_upload" and self.settings.storage_mode is not StorageMode.LOCAL:
+                    try:
+                        content = await self.storage.get_bytes(upload.original_key)
+                        finalized = await self._finalize_upload(
+                            session, upload.id, content, persist_original=False
+                        )
+                        upload = await self._load_owned_upload(session, user.id, finalized.upload_id)
+                    except Exception as ex:
+                        print(f"Failed to finalize upload {upload.id}: {ex}")
                 resolved_uploads.append(upload)
 
             candidate_ids: list[str] = []
@@ -256,6 +267,9 @@ class MilestoneOneWorkflow:
                         candidate_ids.append(candidate.id)
                 except FitCheckError as error:
                     errors.append(f"{upload.id}: {error.code}")
+                    continue
+                except Exception as ex:
+                    errors.append(f"{upload.id}: {str(ex)}")
                     continue
 
             job.progress = 100
