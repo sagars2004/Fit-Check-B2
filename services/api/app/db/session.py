@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.core.config import Settings, get_settings
+from app.core.config import Settings, StorageMode, get_settings
 from app.db.models import Base
 
 
@@ -40,7 +40,11 @@ class Database:
 
     async def pull_backup(self, storage: Any) -> None:
         """Sync SQLite state from storage when running in stateless serverless environments."""
+        if self.settings.storage_mode is not StorageMode.B2:
+            return
         try:
+            from app.services.storage import sha256_bytes
+
             url = make_url(self.settings.database_url)
             if (
                 not url.drivername.startswith("sqlite")
@@ -51,15 +55,26 @@ class Database:
             db_path = Path(url.database).expanduser()
             key = f"{self.settings.b2_prefix}/db/fit_check.db"
             head = await storage.head(key)
-            if not db_path.exists() or db_path.stat().st_size != head.size:
+            remote_sha = getattr(head, "sha256", None) or (
+                head.metadata.get("sha256") if hasattr(head, "metadata") else None
+            )
+            local_sha = sha256_bytes(db_path.read_bytes()) if db_path.exists() else ""
+            if (
+                not db_path.exists()
+                or (remote_sha and local_sha != remote_sha)
+                or db_path.stat().st_size != head.size
+            ):
                 content = await storage.get_bytes(key)
                 db_path.parent.mkdir(parents=True, exist_ok=True)
                 db_path.write_bytes(content)
+                await self.engine.dispose()
         except Exception:
             pass
 
     async def push_backup(self, storage: Any) -> None:
         """Persist SQLite state to storage when running in stateless serverless environments."""
+        if self.settings.storage_mode is not StorageMode.B2:
+            return
         try:
             url = make_url(self.settings.database_url)
             if (
