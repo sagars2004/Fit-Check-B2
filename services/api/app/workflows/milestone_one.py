@@ -593,7 +593,7 @@ class MilestoneOneWorkflow:
             model = generated.model
             object_key = generated.object_key
             content_type = generated.content_type
-            asset_sha256 = generated.sha256
+            asset_sha256 = generated.sha256 or sha256_bytes(output)
 
             # Trust Genblaze manifest
             redacted_manifest = generated.provider_manifest
@@ -1280,18 +1280,20 @@ class MilestoneOneWorkflow:
     async def _owned_garment_or_none(
         self, session: AsyncSession, user_id: str, garment_id: str
     ) -> Garment | None:
-        return await session.scalar(
+        res: Garment | None = await session.scalar(
             select(Garment).where(Garment.id == garment_id, Garment.user_id == user_id)
         )
+        return res
 
     async def _primary_evidence(
         self, session: AsyncSession, garment_id: str
     ) -> GarmentEvidence | None:
-        return await session.scalar(
+        res: GarmentEvidence | None = await session.scalar(
             select(GarmentEvidence)
             .where(GarmentEvidence.garment_id == garment_id)
             .order_by(GarmentEvidence.created_at.asc())
         )
+        return res
 
 
 def _extension_for_upload(filename: str, content_type: str) -> str:

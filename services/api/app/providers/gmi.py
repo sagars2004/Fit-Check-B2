@@ -238,8 +238,11 @@ class GenblazeGMICloudOrchestrator:
             provider="gmicloud",
             model=model,
             content=None,
-            content_type=getattr(asset, "content_type", None)
-            or getattr(asset, "media_type", "image/png"),
+            content_type=str(
+                getattr(asset, "content_type", None)
+                or getattr(asset, "media_type", None)
+                or "image/png"
+            ),
             source_asset_url=getattr(asset, "url", None),
             object_key=object_key,
             sha256=getattr(asset, "sha256", None),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from typing import cast
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
@@ -214,7 +215,7 @@ async def stream_import_events(
 ) -> StreamingResponse:
     """Stream real-time Server-Sent Events (SSE) for import job progress."""
 
-    async def event_generator():
+    async def event_generator() -> AsyncGenerator[str, None]:
         from app.core.errors import FitCheckError
 
         try:

@@ -794,7 +794,7 @@ class MilestoneThreeWorkflow:
     ) -> GarmentAsset | None:
         if not garment.canonical_asset_id:
             return None
-        return await session.scalar(
+        res: GarmentAsset | None = await session.scalar(
             select(GarmentAsset).where(
                 GarmentAsset.id == garment.canonical_asset_id,
                 GarmentAsset.kind == "cutout",
@@ -802,15 +802,17 @@ class MilestoneThreeWorkflow:
                 GarmentAsset.deleted_at.is_(None),
             )
         )
+        return res
 
     async def _primary_evidence(
         self, session: AsyncSession, garment_id: str
     ) -> GarmentEvidence | None:
-        return await session.scalar(
+        res: GarmentEvidence | None = await session.scalar(
             select(GarmentEvidence)
             .where(GarmentEvidence.garment_id == garment_id)
             .order_by(GarmentEvidence.created_at.asc())
         )
+        return res
 
     async def _resolve_parent_run_id(
         self,
