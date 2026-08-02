@@ -697,17 +697,21 @@ function SourceGarmentCards({ garments }: { garments: PreviewSourceGarment[] }) 
       {garments.map((garment) => (
         <article className="tryon-garment-card" key={garment.id}>
           <SourceGarmentImage garment={garment} />
-          <div>
+          <div className="tryon-garment-info">
             <span className={evidenceClass(garment.evidence_status)}>{evidenceLabel(garment.evidence_status)}</span>
-            <strong>{garment.name}</strong>
-            <small>{humanize(garment.category)} · {garment.colors.join(" · ") || "Color under review"}</small>
-            {garment.source_kind ? <small>{sourceKindLabel(garment.source_kind)}</small> : null}
+            <strong className="garment-info-name">{garment.name}</strong>
+            <span className="garment-info-category">{humanize(garment.category)}</span>
+            <span className="garment-info-colors">{garment.colors.join(", ") || "Color under review"}</span>
+            {garment.source_kind ? (
+              <span className="garment-info-kind">{sourceKindLabel(garment.source_kind)}</span>
+            ) : null}
           </div>
         </article>
       ))}
     </div>
   );
 }
+
 
 function SourceGarmentImage({ garment }: { garment: PreviewSourceGarment }) {
   if (garment.image_url) {

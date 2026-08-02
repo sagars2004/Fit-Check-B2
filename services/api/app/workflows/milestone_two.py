@@ -160,8 +160,9 @@ class MilestoneTwoWorkflow:
             )
 
         today_dt = date.today()
-        weather = await self.weather.fetch(user.default_location or "New York, NY", today_dt)
+        weather = await self.weather.forecast(user.default_location or "New York, NY", today_dt)
         title = payload.title or " & ".join(g.name for g in garments)
+
 
         plan = OutfitPlan(
             id=new_id(),
