@@ -1321,18 +1321,20 @@ class MilestoneOneWorkflow:
     async def _load_owned_candidate(
         self, session: AsyncSession, user_id: str, candidate_id: str
     ) -> tuple[GarmentCandidate, Upload]:
-        row = await session.execute(
-            select(GarmentCandidate, Upload)
-            .join(Upload, GarmentCandidate.upload_id == Upload.id)
-            .where(GarmentCandidate.id == candidate_id, Upload.user_id == user_id)
+        candidate = await session.scalar(
+            select(GarmentCandidate).where(GarmentCandidate.id == candidate_id)
         )
-        candidate, upload = row.one_or_none() or (None, None)
-        if candidate is None or upload is None:
+        if candidate is None:
             raise FitCheckError(
                 "CANDIDATE_NOT_FOUND",
                 "That review candidate is unavailable.",
                 entity_id=candidate_id,
             )
+        upload = await session.scalar(
+            select(Upload).where(Upload.id == candidate.upload_id, Upload.user_id == user_id)
+        )
+        if upload is None:
+            upload = await self._load_owned_upload(session, user_id, candidate.upload_id)
         return candidate, upload
 
     async def _load_owned_garment(
