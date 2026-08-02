@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     gmi_org_id: str | None = None
     gmi_request_queue_base_url: str = "https://console.gmicloud.ai/api/v1/ie/requestqueue"
     gmi_llm_base_url: str = "https://api.gmi-serving.com/v1"
-    gmi_vision_model: str | None = None
+    gmi_vision_model: str = "Qwen/Qwen3.6-Max-Preview"
     gmi_image_model: str | None = None
     gmi_tryon_model: str | None = None
     gmi_fallback_image_model: str | None = None

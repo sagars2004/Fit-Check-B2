@@ -1029,6 +1029,7 @@ class MilestoneOneWorkflow:
             metadata={"upload-id": upload.id, "candidate-id": candidate_id, "role": "source-crop"},
         )
         color = approximate_color_name(crop)
+        category, name_suggestion = _infer_fallback_category(crop, upload.width, upload.height)
         candidate = GarmentCandidate(
             id=candidate_id,
             upload_id=upload.id,
@@ -1040,8 +1041,8 @@ class MilestoneOneWorkflow:
                 "bottom": float(upload.height),
             },
             attributes={
-                "name_suggestion": f"{color.title()} top",
-                "category": "top",
+                "name_suggestion": name_suggestion,
+                "category": category,
                 "colors": [color],
                 "tags": [],
                 "apparent_material": "needs review",
@@ -1413,3 +1414,19 @@ def _import_stages(status: str) -> list[str]:
     except ValueError:
         return [status]
     return ordered[: index + 1]
+
+
+def _infer_fallback_category(crop_bytes: bytes, width: int, height: int) -> tuple[str, str]:
+    """Infer category and suggested name when vision API detection is unconfigured or empty."""
+    color = approximate_color_name(crop_bytes)
+    aspect_ratio = float(height) / float(max(1, width))
+
+    # Very tall aspect ratio (height >= 1.55x width) strongly correlates with pants/trousers
+    if aspect_ratio >= 1.55:
+        return "bottom", f"{color.title()} pants"
+    elif aspect_ratio <= 0.8:
+        is_shoe_color = color in ("black", "brown", "white", "gray", "beige")
+        category = "footwear" if is_shoe_color else "accessory"
+        return category, f"{color.title()} {category}"
+
+    return "top", f"{color.title()} top"

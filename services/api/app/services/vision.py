@@ -29,9 +29,10 @@ async def extract_garments_with_vision(
 ) -> list[DetectedGarment]:
     """Call GMI multimodal vision model if configured, or return fallback candidate."""
 
-    if not settings.has_gmi_credentials() or not settings.gmi_vision_model:
+    if not settings.has_gmi_credentials():
         return []
 
+    vision_model = settings.gmi_vision_model or "Qwen/Qwen3.6-Max-Preview"
     api_key = settings.gmi_api_key.get_secret_value() if settings.gmi_api_key else ""
     endpoint = f"{settings.gmi_llm_base_url.rstrip('/')}/chat/completions"
     headers = {
@@ -66,7 +67,7 @@ async def extract_garments_with_vision(
     )
 
     body = {
-        "model": settings.gmi_vision_model,
+        "model": vision_model,
         "messages": [
             {
                 "role": "user",
