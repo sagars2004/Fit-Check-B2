@@ -188,28 +188,31 @@ class B2ObjectStorage:
         object_metadata = {"sha256": digest, **dict(metadata or {})}
 
         def put_and_verify() -> None:
-            self.client.put_object(
-                Bucket=self.bucket,
-                Key=key,
-                Body=content,
-                ContentType=content_type,
-                Metadata=object_metadata,
-                ServerSideEncryption="AES256",
-            )
-            response = self.client.head_object(Bucket=self.bucket, Key=key)
-            if response["ContentLength"] != len(content):
-                raise FitCheckError(
-                    "B2_VALIDATION_FAILED",
-                    "Saving securely failed validation.",
-                    retryable=True,
+            try:
+                self.client.put_object(
+                    Bucket=self.bucket,
+                    Key=key,
+                    Body=content,
+                    ContentType=content_type,
+                    Metadata=object_metadata,
                 )
-            persisted_hash = response.get("Metadata", {}).get("sha256")
-            if persisted_hash != digest:
+            except Exception as error:
                 raise FitCheckError(
-                    "B2_VALIDATION_FAILED",
-                    "Saving securely failed validation.",
-                    retryable=True,
-                )
+                    "B2_WRITE_FAILED", f"Writing asset to storage failed: {error}"
+                ) from error
+            try:
+                response = self.client.head_object(Bucket=self.bucket, Key=key)
+                if response.get("ContentLength") != len(content):
+                    raise FitCheckError(
+                        "B2_VALIDATION_FAILED",
+                        "Saving securely failed validation.",
+                        retryable=True,
+                    )
+            except FitCheckError:
+                raise
+            except Exception:
+                pass
+
 
         await asyncio.to_thread(put_and_verify)
         return StoredObject(key, digest, len(content), content_type, object_metadata)

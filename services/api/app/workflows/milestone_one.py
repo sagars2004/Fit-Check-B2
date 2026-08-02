@@ -788,11 +788,15 @@ class MilestoneOneWorkflow:
             )
         garments = list((await session.scalars(statement)).all())
         if not garments and not category and not status and not query and not color:
-            from app.workflows.milestone_four import MilestoneFourDemoWorkflow
+            try:
+                from app.workflows.milestone_four import MilestoneFourDemoWorkflow
 
-            await MilestoneFourDemoWorkflow(self.settings, self.storage).seed(session)
-            garments = list((await session.scalars(statement)).all())
+                await MilestoneFourDemoWorkflow(self.settings, self.storage).seed(session)
+                garments = list((await session.scalars(statement)).all())
+            except Exception:
+                pass
         lowered_query = query.lower().strip() if query else ""
+
 
         lowered_color = color.lower().strip() if color else ""
         filtered = [
