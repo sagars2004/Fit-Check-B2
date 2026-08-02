@@ -249,25 +249,40 @@ class B2ObjectStorage:
         await asyncio.to_thread(self.client.delete_object, Bucket=self.bucket, Key=key)
 
     async def signed_read_url(self, key: str, expires_seconds: int | None = None) -> str:
-        return await asyncio.to_thread(
-            self.client.generate_presigned_url,
-            "get_object",
-            Params={"Bucket": self.bucket, "Key": key},
-            ExpiresIn=expires_seconds or self.default_expiry,
-        )
+        try:
+            return await asyncio.to_thread(
+                self.client.generate_presigned_url,
+                "get_object",
+                Params={"Bucket": self.bucket, "Key": key},
+                ExpiresIn=expires_seconds or self.default_expiry,
+            )
+        except Exception as ex:
+            raise FitCheckError(
+                "B2_PRESIGN_FAILED",
+                f"Failed to generate secure read URL: {ex}",
+            ) from ex
 
     async def signed_upload_url(
         self, key: str, content_type: str, expires_seconds: int | None = None
     ) -> str:
-        return await asyncio.to_thread(
-            self.client.generate_presigned_url,
-            "put_object",
-            Params={"Bucket": self.bucket, "Key": key, "ContentType": content_type},
-            ExpiresIn=expires_seconds or self.default_expiry,
-        )
+        try:
+            return await asyncio.to_thread(
+                self.client.generate_presigned_url,
+                "put_object",
+                Params={"Bucket": self.bucket, "Key": key, "ContentType": content_type},
+                ExpiresIn=expires_seconds or self.default_expiry,
+            )
+        except Exception as ex:
+            raise FitCheckError(
+                "B2_PRESIGN_FAILED",
+                f"Failed to generate secure upload target: {ex}",
+            ) from ex
 
 
 def build_storage(settings: Settings) -> ObjectStorage:
     if settings.storage_mode is StorageMode.LOCAL:
         return LocalObjectStorage(settings.media_root, settings.public_media_base_url)
-    return B2ObjectStorage(settings)
+    try:
+        return B2ObjectStorage(settings)
+    except FitCheckError:
+        return LocalObjectStorage(settings.media_root, settings.public_media_base_url)

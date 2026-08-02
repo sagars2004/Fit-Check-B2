@@ -55,6 +55,9 @@ def create_app(runtime_settings: Settings | None = None) -> FastAPI:
     @application.exception_handler(FitCheckError)
     async def fit_check_error_handler(_: Request, exc: FitCheckError) -> JSONResponse:
         status_code = {
+            "B2_CONFIGURATION_MISSING": 422,
+            "B2_PRESIGN_FAILED": 502,
+            "B2_VALIDATION_FAILED": 502,
             "OBJECT_NOT_FOUND": 404,
             "INVALID_OBJECT_KEY": 400,
             "DEMO_ENDPOINT_DISABLED": 404,
@@ -94,6 +97,17 @@ def create_app(runtime_settings: Settings | None = None) -> FastAPI:
             "WEAR_EVENT_NOT_FOUND": 404,
         }.get(exc.code, 422)
         return JSONResponse(status_code=status_code, content=exc.as_dict())
+
+    @application.exception_handler(Exception)
+    async def global_exception_handler(_: Request, exc: Exception) -> JSONResponse:
+        logging.error(f"Unhandled API Exception: {exc}", exc_info=True)
+        return JSONResponse(
+            status_code=500,
+            content={
+                "code": "INTERNAL_SERVER_ERROR",
+                "message": str(exc) or "An internal server error occurred.",
+            },
+        )
 
     @application.get("/health", response_model=HealthResponse)
     async def health() -> HealthResponse:
