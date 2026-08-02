@@ -472,10 +472,12 @@ h1 {
   background: rgba(25, 25, 25, 0.02);
   border: 1px solid var(--line);
   padding: 24px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)) auto;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  align-items: flex-end;
+  align-items: stretch;
+  width: 100%;
+  box-sizing: border-box;
   margin-bottom: 32px;
 }
 
@@ -488,6 +490,8 @@ h1 {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--muted);
+  width: 100%;
+  align-items: stretch;
 }
 
 .today-context input[type="text"], 
@@ -497,7 +501,9 @@ h1 {
   padding: 10px 14px;
   color: var(--ink);
   font-size: 0.9rem;
-  border-radius: 0;
+  border-radius: 8px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .today-context input:focus {
@@ -505,13 +511,51 @@ h1 {
   outline: none;
 }
 
+.today-context button.primary-button {
+  width: 100%;
+  margin-top: 8px;
+}
+
 .utilization-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  gap: 12px !important;
   font-size: 0.875rem;
   font-weight: 500;
+  margin-top: 4px;
+  text-transform: none !important;
+  letter-spacing: normal !important;
 }
+
+.utilization-toggle input[type="checkbox"] {
+  width: 18px !important;
+  height: 18px !important;
+  accent-color: var(--ink);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.utilization-toggle span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.utilization-toggle strong {
+  color: var(--ink);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.utilization-toggle small {
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-transform: none;
+  font-weight: 400;
+}
+
 
 /* Forecast Card */
 .forecast-card, .preview-request, .selected-look-panel {
@@ -1069,13 +1113,17 @@ details p, details ul {
   background: transparent;
   padding: 0;
   margin-bottom: 0;
+  width: 100%;
+  align-items: stretch;
 }
 .bento-box .today-context input[type="text"], 
 .bento-box .today-context input[type="date"] {
   border-radius: 8px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.5);
+  width: 100%;
 }
+
 
 /* Hide old borders for nested elements */
 .bento-box .review-header {

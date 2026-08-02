@@ -130,7 +130,7 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
         <div className="panel-heading">
           <h3>Plan a look</h3>
         </div>
-      <form className="today-context" onSubmit={(event) => void handlePlan(event)} style={{ display: 'flex', flexDirection: 'column' }}>
+      <form className="today-context" onSubmit={(event) => void handlePlan(event)}>
         <label>
           Location
           <input onChange={(event) => setLocation(event.target.value)} placeholder="e.g. New York, NY" value={location} />
@@ -158,10 +158,11 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
             <small>Prioritize less-worn items.</small>
           </span>
         </label>
-        <button className="primary-button" disabled={isPlanning} type="submit" style={{ marginTop: '16px' }}>
+        <button className="primary-button" disabled={isPlanning} type="submit">
           {isPlanning ? "Planning owned looks…" : "Plan three looks"}
         </button>
       </form>
+
       </div>
 
       {(notice || error) ? (
