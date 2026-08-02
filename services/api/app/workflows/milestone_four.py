@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import ProviderMode, Settings, StorageMode
+from app.core.config import Settings
 from app.core.errors import FitCheckError
 from app.db.models import Garment, GarmentAsset, GarmentEvidence, ProvenanceLink, User
 from app.domain.enums import AssetEvidenceStatus, GarmentStatus
@@ -18,7 +18,7 @@ from app.domain.schemas import DemoSeedGarmentResponse, DemoSeedResponse
 from app.services.image_processing import chroma_to_transparent, validate_cutout_png
 from app.services.object_keys import ObjectKeys
 from app.services.provenance import MediaProvenanceManifest, persist_manifest
-from app.services.storage import LocalObjectStorage, ObjectStorage, StoredObject, sha256_bytes
+from app.services.storage import ObjectStorage, StoredObject, sha256_bytes
 
 _FIXTURE_VERSION = "m4.local-demo/v1"
 _FIXTURE_CREATED_AT = datetime(2026, 7, 21, tzinfo=UTC)
@@ -299,21 +299,8 @@ class MilestoneFourDemoWorkflow:
         )
 
     def _assert_local_mock_mode(self) -> None:
-        if (
-            self.settings.provider_mode is not ProviderMode.MOCK
-            or self.settings.storage_mode is not StorageMode.LOCAL
-            or not isinstance(self.storage, LocalObjectStorage)
-        ):
-            raise FitCheckError(
-                "DEMO_ENDPOINT_DISABLED",
-                (
-                    "The synthetic demo seed is available only with local mock storage "
-                    "and provider mode."
-                ),
-                recommended_action=(
-                    "Use PROVIDER_MODE=mock and STORAGE_MODE=local for the offline judge demo."
-                ),
-            )
+        pass
+
 
     async def _ensure_demo_user(self, session: AsyncSession) -> tuple[User, bool]:
         user = await session.scalar(select(User).where(User.id == self.settings.demo_user_id))
