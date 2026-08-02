@@ -219,6 +219,8 @@ class GarmentUpdateRequest(BaseModel):
     purchase_date: date | None = None
     notes: str | None = Field(default=None, max_length=2_000)
     archive: bool | None = None
+    evidence_status: str | None = Field(default=None, max_length=40)
+
 
 
 class GarmentResponse(BaseModel):

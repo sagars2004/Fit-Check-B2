@@ -203,7 +203,9 @@ export type GarmentUpdate = {
   purchase_date?: string;
   notes?: string;
   archive?: boolean;
+  evidence_status?: string;
 };
+
 
 export type WeatherSnapshot = {
   location: string;

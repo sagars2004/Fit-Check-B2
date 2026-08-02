@@ -819,11 +819,19 @@ class MilestoneOneWorkflow:
                 setattr(garment, field, value)
         if payload.price is not None:
             garment.price = Decimal(str(payload.price))
+        if payload.evidence_status is not None:
+            garment.evidence_status = payload.evidence_status
+            if (
+                payload.evidence_status == AssetEvidenceStatus.VERIFIED_SOURCE_BACKED.value
+                and garment.status == GarmentStatus.NEEDS_BETTER_PHOTO.value
+            ):
+                garment.status = GarmentStatus.APPROVED.value
         if payload.archive is True:
             garment.status = GarmentStatus.ARCHIVED.value
             garment.archived_at = datetime.now(UTC)
         await session.commit()
         return await self._garment_response(session, garment)
+
 
     async def _finalize_upload(
         self,
