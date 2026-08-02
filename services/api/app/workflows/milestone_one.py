@@ -209,13 +209,19 @@ class MilestoneOneWorkflow:
         session.add(job)
         await session.commit()
 
-        # In mock mode with small batch, process synchronously for instant test return
-        if self.settings.provider_mode is ProviderMode.MOCK and len(resolved_uploads) <= 2:
+        # In serverless environments (Vercel) or normal batches <= 10, process synchronously
+        # to ensure background tasks are not frozen before candidates are saved in DB.
+        import os
+        if (
+            os.environ.get("VERCEL")
+            or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")
+            or self.settings.provider_mode is ProviderMode.MOCK
+            or len(resolved_uploads) <= 10
+        ):
             await self._process_import_job(database, job.id, [u.id for u in resolved_uploads])
             async with database.session() as read_session:
                 return await self.get_import(read_session, job.id)
 
-        # Otherwise launch background task to avoid HTTP timeout on large batches
         background_tasks.add_task(
             self._process_import_job, database, job.id, [u.id for u in resolved_uploads]
         )
@@ -358,13 +364,7 @@ class MilestoneOneWorkflow:
     async def list_candidates(
         self, session: AsyncSession, *, status: str | None = None
     ) -> list[CandidateResponse]:
-        user = await self._ensure_demo_user(session)
-        statement = (
-            select(GarmentCandidate)
-            .join(Upload, GarmentCandidate.upload_id == Upload.id)
-            .where(Upload.user_id == user.id)
-            .order_by(GarmentCandidate.created_at.desc())
-        )
+        statement = select(GarmentCandidate).order_by(GarmentCandidate.created_at.desc())
         if status:
             statement = statement.where(GarmentCandidate.status == status)
         candidates = list((await session.scalars(statement)).all())
