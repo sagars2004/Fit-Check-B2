@@ -11,13 +11,6 @@ function getApiBaseUrl(): string {
     ) {
       return process.env.NEXT_PUBLIC_API_BASE_URL.replace(/\/$/, "");
     }
-    const host = window.location.hostname;
-    if (host.includes("-web.vercel.app")) {
-      return `https://${host.replace("-web.vercel.app", "-api.vercel.app")}`;
-    }
-    if (host.includes("-web-")) {
-      return `https://${host.replace("-web-", "-api-")}`;
-    }
     return "";
   }
 
