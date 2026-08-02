@@ -438,7 +438,24 @@ class MilestoneThreeWorkflow:
         )
         return [await self._render_response(session, render) for render in renders]
 
+    async def delete_render(
+        self, session: AsyncSession, render_id: str
+    ) -> dict[str, str]:
+        await self._ensure_demo_user(session)
+        render = await session.scalar(
+            select(TryOnRender).where(TryOnRender.id == render_id)
+        )
+
+        if render is None:
+            raise FitCheckError(
+                "RENDER_NOT_FOUND", "That preview render was not found.", entity_id=render_id
+            )
+        await session.delete(render)
+        await session.commit()
+        return {"status": "deleted", "id": render_id}
+
     async def _finalize_profile(
+
         self,
         session: AsyncSession,
         profile_id: str,

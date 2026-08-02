@@ -29,6 +29,7 @@ from app.db.session import get_session
 from app.domain.schemas import (
     CandidateResponse,
     CandidateReviewRequest,
+    CustomOutfitRequest,
     CutoutReviewRequest,
     DemoAssetResponse,
     DemoSeedResponse,
@@ -353,6 +354,16 @@ async def recommend_outfits(
     return await _milestone_two_workflow(request).recommend(session, payload)
 
 
+@router.post("/outfits/custom", response_model=OutfitPlanResponse, status_code=201)
+async def create_custom_outfit(
+    payload: CustomOutfitRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> OutfitPlanResponse:
+    return await _milestone_two_workflow(request).create_custom_outfit(session, payload)
+
+
+
 @router.get("/outfits", response_model=list[OutfitPlanResponse])
 async def list_outfits(
     request: Request,
@@ -407,6 +418,16 @@ async def list_all_renders(
     session: AsyncSession = Depends(get_session),
 ) -> list[TryOnRenderResponse]:
     return await _milestone_three_workflow(request).list_all_renders(session, limit=limit)
+
+
+@router.delete("/renders/{render_id}")
+async def delete_render(
+    render_id: str,
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, str]:
+    return await _milestone_three_workflow(request).delete_render(session, render_id)
+
 
 
 @router.get("/outfits/renders/{render_id}/events")

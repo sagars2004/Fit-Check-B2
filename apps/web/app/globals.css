@@ -1178,6 +1178,31 @@ details p, details ul {
   opacity: 1;
 }
 
+.gallery-delete-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  z-index: 5;
+}
+
+.gallery-delete-btn:hover {
+  background: rgba(180, 40, 40, 0.9);
+  transform: scale(1.1);
+}
+
+
 .gallery-sources {
   display: flex;
   gap: 12px;
@@ -1309,3 +1334,94 @@ details p, details ul {
   color: var(--ink);
   font-weight: 500;
 }
+
+/* Custom Outfit Builder */
+.custom-builder-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 24px;
+  align-items: flex-end;
+  margin-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .custom-builder-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.custom-builder-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.custom-builder-field label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.custom-select-wrapper select {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.custom-select-wrapper select:focus {
+  border-color: var(--ink);
+  outline: none;
+}
+
+.custom-item-mini-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: rgba(25, 25, 25, 0.02);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-top: 8px;
+}
+
+.mini-garment-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.mini-thumb-fallback {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(25, 25, 25, 0.04);
+  font-size: 1.2rem;
+}
+
+.custom-item-mini-card div {
+  display: flex;
+  flex-direction: column;
+}
+
+.custom-item-mini-card strong {
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+
+.custom-item-mini-card small {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+

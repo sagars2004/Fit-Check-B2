@@ -1,15 +1,19 @@
 "use client";
 
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
+  type Garment,
   type OutfitItem,
   type OutfitPlan,
   type OutfitRecommendation,
+  createCustomOutfit,
+  getGarments,
   recordOutfitWear,
   recommendOutfits,
   saveOutfit,
 } from "../lib/api";
+
 
 type ActiveAction = { outfitId: string; kind: "save" | "wear" | "undo" } | null;
 
@@ -29,6 +33,83 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
   const [viewingOutfitId, setViewingOutfitId] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const [allGarments, setAllGarments] = useState<Garment[]>([]);
+  const [selectedTopId, setSelectedTopId] = useState<string>("");
+  const [selectedBottomId, setSelectedBottomId] = useState<string>("");
+  const [isCreatingCustom, setIsCreatingCustom] = useState(false);
+
+  useEffect(() => {
+    async function loadGarments() {
+      try {
+        const items = await getGarments();
+        setAllGarments(items.filter((g) => g.status === "approved"));
+      } catch {
+        // Safe ignore
+      }
+    }
+    void loadGarments();
+  }, []);
+
+  const tops = useMemo(() => {
+    const matched = allGarments.filter((g) => {
+      const cat = g.category.toLowerCase();
+      return (
+        cat.includes("top") ||
+        cat.includes("shirt") ||
+        cat.includes("jacket") ||
+        cat.includes("outerwear") ||
+        cat.includes("sweater") ||
+        cat.includes("hoodie") ||
+        cat.includes("coat") ||
+        cat.includes("blazer") ||
+        cat.includes("t-shirt")
+      );
+    });
+    return matched.length > 0 ? matched : allGarments;
+  }, [allGarments]);
+
+  const bottoms = useMemo(() => {
+    const matched = allGarments.filter((g) => {
+      const cat = g.category.toLowerCase();
+      return (
+        cat.includes("bottom") ||
+        cat.includes("pants") ||
+        cat.includes("jeans") ||
+        cat.includes("shorts") ||
+        cat.includes("skirt") ||
+        cat.includes("trouser") ||
+        cat.includes("legging")
+      );
+    });
+    return matched.length > 0 ? matched : allGarments;
+  }, [allGarments]);
+
+  const selectedTopGarment = allGarments.find((g) => g.id === selectedTopId);
+  const selectedBottomGarment = allGarments.find((g) => g.id === selectedBottomId);
+
+  async function handleCreateCustom() {
+    const ids: string[] = [];
+    if (selectedTopId) ids.push(selectedTopId);
+    if (selectedBottomId) ids.push(selectedBottomId);
+    if (ids.length === 0) return;
+
+    setIsCreatingCustom(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const customOutfit = await createCustomOutfit(ids);
+      setNotice("Custom outfit created! Sent to Try-On Studio below.");
+      if (onPreviewOutfit) {
+        onPreviewOutfit(customOutfit);
+      }
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "Could not create custom outfit combination.");
+    } finally {
+      setIsCreatingCustom(false);
+    }
+  }
+
 
   useEffect(() => {
     if (viewingOutfitId) {
@@ -238,9 +319,106 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
           )}
         </div>
       ) : null}
+
+      {allGarments.length > 0 ? (
+        <div className="bento-box bento-col-12" style={{ marginTop: '16px' }}>
+          <div className="recommendation-heading">
+            <div>
+              <p className="eyebrow">Mix & Match</p>
+              <h3>Build a Custom Combination</h3>
+            </div>
+            <span>Manual Top & Bottom Selection</span>
+          </div>
+
+          <div className="custom-builder-grid">
+            <div className="custom-builder-field">
+              <label htmlFor="custom-top-select">
+                <strong>Select Top</strong>
+                <small>Tops, shirts, jackets, or sweaters</small>
+              </label>
+              <div className="custom-select-wrapper">
+                <select
+                  id="custom-top-select"
+                  value={selectedTopId}
+                  onChange={(e) => setSelectedTopId(e.target.value)}
+                >
+                  <option value="">-- Choose a Top --</option>
+                  {tops.map((top) => (
+                    <option key={top.id} value={top.id}>
+                      {top.name} ({humanize(top.category)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {selectedTopGarment ? (
+                <div className="custom-item-mini-card">
+                  {selectedTopGarment.source_crop_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={selectedTopGarment.source_crop_url} alt={selectedTopGarment.name} className="mini-garment-thumb" />
+                  ) : (
+                    <span className="mini-thumb-fallback">👕</span>
+                  )}
+                  <div>
+                    <strong>{selectedTopGarment.name}</strong>
+                    <small>{humanize(selectedTopGarment.category)} · {selectedTopGarment.colors.join(", ") || "Approved"}</small>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="custom-builder-field">
+              <label htmlFor="custom-bottom-select">
+                <strong>Select Bottom</strong>
+                <small>Pants, shorts, jeans, or skirts</small>
+              </label>
+              <div className="custom-select-wrapper">
+                <select
+                  id="custom-bottom-select"
+                  value={selectedBottomId}
+                  onChange={(e) => setSelectedBottomId(e.target.value)}
+                >
+                  <option value="">-- Choose a Bottom --</option>
+                  {bottoms.map((bottom) => (
+                    <option key={bottom.id} value={bottom.id}>
+                      {bottom.name} ({humanize(bottom.category)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {selectedBottomGarment ? (
+                <div className="custom-item-mini-card">
+                  {selectedBottomGarment.source_crop_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={selectedBottomGarment.source_crop_url} alt={selectedBottomGarment.name} className="mini-garment-thumb" />
+                  ) : (
+                    <span className="mini-thumb-fallback">👖</span>
+                  )}
+                  <div>
+                    <strong>{selectedBottomGarment.name}</strong>
+                    <small>{humanize(selectedBottomGarment.category)} · {selectedBottomGarment.colors.join(", ") || "Approved"}</small>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="custom-builder-action">
+              <button
+                className="primary-button"
+                disabled={isCreatingCustom || (!selectedTopId && !selectedBottomId)}
+                onClick={() => void handleCreateCustom()}
+                type="button"
+                style={{ width: '100%', height: '48px' }}
+              >
+                {isCreatingCustom ? "Creating Custom Look…" : "Preview Custom Pair on me →"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
+
 
 function OutfitCard({
   outfit,

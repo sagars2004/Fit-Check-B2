@@ -22,6 +22,7 @@ from app.db.models import (
 )
 from app.domain.enums import GarmentStatus, OutfitStatus
 from app.domain.schemas import (
+    CustomOutfitRequest,
     OutfitItemResponse,
     OutfitPlanResponse,
     OutfitRecommendationResponse,
@@ -142,6 +143,56 @@ class MilestoneTwoWorkflow:
             statement = statement.where(OutfitPlan.status == status)
         plans = list((await session.scalars(statement)).all())
         return [await self._plan_response(session, plan) for plan in plans]
+
+    async def create_custom_outfit(
+        self,
+        session: AsyncSession,
+        payload: CustomOutfitRequest,
+    ) -> OutfitPlanResponse:
+        user = await self._ensure_demo_user(session)
+        stmt = select(Garment).where(
+            Garment.user_id == user.id, Garment.id.in_(payload.garment_ids)
+        )
+        garments = list((await session.scalars(stmt)).all())
+        if not garments:
+            raise FitCheckError(
+                "GARMENT_NOT_FOUND", "No valid wardrobe items found for custom outfit."
+            )
+
+        today_dt = date.today()
+        weather = await self.weather.fetch(user.default_location or "New York, NY", today_dt)
+        title = payload.title or " & ".join(g.name for g in garments)
+
+        plan = OutfitPlan(
+            id=new_id(),
+            user_id=user.id,
+            weather_snapshot=weather.as_dict(),
+            occasion="Custom Mix & Match",
+            score=100.0,
+            reasoning=f"Custom outfit manually selected: {title}",
+            status=OutfitStatus.PROPOSED.value,
+            planner_run_id=f"custom-builder-{new_id()}",
+        )
+        session.add(plan)
+        await session.flush()
+
+        top_terms = ("top", "shirt", "jacket", "outerwear", "sweater", "hoodie", "blouse", "coat")
+        bottom_terms = ("bottom", "pants", "shorts", "skirt", "jeans", "trouser", "legging")
+
+        for g in garments:
+            cat = g.category.lower()
+            if any(t in cat for t in top_terms):
+                role = "top"
+            elif any(b in cat for b in bottom_terms):
+                role = "bottom"
+            else:
+                role = "one_piece"
+            session.add(OutfitItem(id=new_id(), outfit_id=plan.id, garment_id=g.id, role=role))
+
+
+        await session.commit()
+        return await self._plan_response(session, plan)
+
 
     async def save_outfit(self, session: AsyncSession, outfit_id: str) -> OutfitPlanResponse:
         user = await self._ensure_demo_user(session)

@@ -462,6 +462,14 @@ export async function recommendOutfits(request: {
   });
 }
 
+export async function createCustomOutfit(garmentIds: string[], title?: string): Promise<OutfitPlan> {
+  return requestJson<OutfitPlan>("/v1/outfits/custom", {
+    method: "POST",
+    body: JSON.stringify({ garment_ids: garmentIds, title }),
+  });
+}
+
+
 export async function getOutfits(status?: string): Promise<OutfitPlan[]> {
   const query = status ? `?status=${encodeURIComponent(status)}` : "";
   return requestJson<OutfitPlan[]>(`/v1/outfits${query}`);
@@ -542,6 +550,13 @@ export async function getOutfitRenders(outfitId: string): Promise<TryOnRender[]>
 export async function getAllRenders(limit: number = 50): Promise<TryOnRender[]> {
   return requestJson<TryOnRender[]>(`/v1/renders?limit=${limit}`);
 }
+
+export async function deleteRender(renderId: string): Promise<{ status: string; id: string }> {
+  return requestJson<{ status: string; id: string }>(`/v1/renders/${renderId}`, {
+    method: "DELETE",
+  });
+}
+
 
 export async function purgeUserData(): Promise<{ status: string; message: string }> {
   return requestJson<{ status: string; message: string }>("/v1/users/me/data", {
