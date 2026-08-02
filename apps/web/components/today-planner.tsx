@@ -53,7 +53,7 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
       });
       setRecommendation(next);
       setNotice(
-        `${next.options.length} owned-only look${next.options.length === 1 ? "" : "s"} planned. No image generation was used.`,
+        `${next.options.length} outfit${next.options.length === 1 ? "" : "s"} planned for your day.`,
       );
     } catch (caught: unknown) {
       setRecommendation(null);
@@ -69,7 +69,7 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
     try {
       const saved = await saveOutfit(outfitId);
       replaceOption(saved);
-      setNotice("Saved this owned-only look. Its garments and source evidence stay unchanged.");
+      setNotice("Look saved to your collection.");
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "That look could not be saved.");
     } finally {
@@ -89,8 +89,8 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
       })) });
       setNotice(
         action === "wear"
-          ? "Wear logged. Each garment's use count was incremented."
-          : "Wear log reversed. Each garment's use count was restored.",
+          ? "Wear logged successfully."
+          : "Wear log restored.",
       );
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "The wear log could not be updated.");
@@ -122,8 +122,7 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
         <span className="status-pill status-ready">Owned-only planner</span>
       </div>
       <p className="workbench-copy">
-        Fit Check applies weather, occasion, palette, recent wear, and optional utilization rules locally.
-        Every option is validated against your approved wardrobe before it appears.
+        Smart recommendations tailored to your local weather, occasion, and wardrobe.
       </p>
       </div>
 
@@ -156,7 +155,7 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
           />
           <span>
             <strong>Utilization mode</strong>
-            <small>Gently favor compatible pieces with fewer wears.</small>
+            <small>Prioritize less-worn items.</small>
           </span>
         </label>
         <button className="primary-button" disabled={isPlanning} type="submit" style={{ marginTop: '16px' }}>
@@ -198,8 +197,7 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
         </>
       ) : (
         <p className="empty-state" role="status" style={{ margin: 'auto' }}>
-          Choose a date and occasion to plan from your approved wardrobe. Held items and unreviewed
-          candidates are excluded, and planning never creates an image.
+          Select a location, date, and occasion to get personalized outfit recommendations.
         </p>
       )}
       </div>
@@ -211,7 +209,7 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
               <p className="eyebrow">Three valid options</p>
               <h3>For {recommendation.occasion}</h3>
             </div>
-            <span>Rules first · explanation second</span>
+            <span>Outfit Breakdown</span>
           </div>
           <div className="outfit-grid">
             {recommendation.options.map((outfit, index) => (
@@ -219,6 +217,8 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
                 key={outfit.id}
                 outfit={outfit}
                 rank={index + 1}
+                isSelected={selectedPreviewOutfitId === outfit.id}
+                onPreview={onPreviewOutfit}
                 onView={() => setViewingOutfitId(outfit.id)}
               />
             ))}
@@ -245,22 +245,54 @@ function OutfitCard({
   outfit,
   rank,
   onView,
+  onPreview,
+  isSelected = false,
 }: {
   outfit: OutfitPlan;
   rank: number;
   onView: () => void;
+  onPreview?: (outfit: OutfitPlan) => void;
+  isSelected?: boolean;
 }) {
   return (
-    <article className="outfit-card" onClick={onView}>
+    <article className={`outfit-card ${isSelected ? "outfit-card-selected" : ""}`} onClick={onView}>
       <div className="outfit-card-meta">
         <span className="review-badge">Option {rank}</span>
         <span>{Math.round(outfit.score)} suitability</span>
       </div>
       <h4>{outfit.title}</h4>
       <p className="outfit-reasoning">{outfit.reasoning}</p>
+
+      <div className="outfit-card-actions" style={{ marginTop: "auto", paddingTop: "12px", display: "flex", gap: "8px", alignItems: "center" }}>
+        {onPreview ? (
+          <button
+            className={isSelected ? "preview-button preview-button-selected" : "primary-button"}
+            onClick={(event) => {
+              event.stopPropagation();
+              onPreview(outfit);
+            }}
+            type="button"
+            style={{ fontSize: "0.8rem", padding: "8px 14px" }}
+          >
+            {isSelected ? "Selected for preview ✓" : "Preview on me →"}
+          </button>
+        ) : null}
+        <button
+          className="secondary-button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onView();
+          }}
+          type="button"
+          style={{ fontSize: "0.8rem", padding: "8px 12px" }}
+        >
+          Details
+        </button>
+      </div>
     </article>
   );
 }
+
 
 function OutfitViewer({
   activeAction,
@@ -296,7 +328,7 @@ function OutfitViewer({
             {outfit.items.map((item) => <OutfitItemTile item={item} key={`${outfit.id}-${item.garment_id}`} />)}
           </div>
 
-          <p className="outfit-disclosure">Approved owned garments only · no try-on image has been generated.</p>
+          <p className="outfit-disclosure">Garments from your approved wardrobe.</p>
           
           <div className="review-actions" style={{ marginTop: "24px" }}>
             <button disabled={saving || outfit.status === "saved" || outfit.status === "worn"} onClick={() => void onSave(outfit.id)} type="button">

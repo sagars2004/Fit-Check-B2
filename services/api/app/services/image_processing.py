@@ -123,15 +123,39 @@ def approximate_color_name(source: bytes) -> str:
     )
 
 
-def chroma_to_transparent(source: bytes, *, green_bias: int = 32) -> bytes:
-    """Remove a known chroma-green background deterministically."""
+def chroma_to_transparent(source: bytes, *, green_bias: int = 25) -> bytes:
+    """Extract clean transparent garment cutouts by removing background colors."""
     with Image.open(BytesIO(source)).convert("RGBA") as image:
         pixels = image.load()
-        for y in range(image.height):
-            for x in range(image.width):
-                red, green, blue, alpha = pixels[x, y]
-                if green > red + green_bias and green > blue + green_bias:
-                    pixels[x, y] = (red, green, blue, 0)
+        w, h = image.width, image.height
+
+        # Sample border pixels to detect background color
+        border_pixels = []
+        for x in range(w):
+            border_pixels.append(pixels[x, 0][:3])
+            border_pixels.append(pixels[x, h - 1][:3])
+        for y in range(h):
+            border_pixels.append(pixels[0, y][:3])
+            border_pixels.append(pixels[w - 1, y][:3])
+
+        avg_r = sum(p[0] for p in border_pixels) // max(1, len(border_pixels))
+        avg_g = sum(p[1] for p in border_pixels) // max(1, len(border_pixels))
+        avg_b = sum(p[2] for p in border_pixels) // max(1, len(border_pixels))
+
+        is_light_bg = avg_r > 190 and avg_g > 190 and avg_b > 190
+
+        for y in range(h):
+            for x in range(w):
+                r, g, b, a = pixels[x, y]
+                # Chroma green screen check
+                if g > r + green_bias and g > b + green_bias:
+                    pixels[x, y] = (r, g, b, 0)
+                # Light/white studio background check
+                elif is_light_bg and r > 200 and g > 200 and b > 200:
+                    diff = max(abs(r - avg_r), abs(g - avg_g), abs(b - avg_b))
+                    if diff < 45:
+                        pixels[x, y] = (r, g, b, 0)
+
         output = BytesIO()
         image.save(output, format="PNG")
         return output.getvalue()

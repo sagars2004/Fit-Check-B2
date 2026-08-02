@@ -301,17 +301,15 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
       <div className="bento-box bento-col-12">
         <div className="section-heading">
         <div>
-          <p className="eyebrow">Milestone 3 · selected AI preview</p>
-          <h2 id="try-on-heading">Preview one owned look on you, with the evidence in view.</h2>
+          <p className="eyebrow">Virtual Try-On</p>
+          <h2 id="try-on-heading">Visualize your outfits in realistic AI detail.</h2>
         </div>
         <span className="status-pill status-review">
           {outfit ? "One selected look" : "Choose a look first"}
         </span>
       </div>
       <p className="workbench-copy">
-        A preview is created only when you select one recommendation and a consented reference photo.
-        It is an AI-generated visualization—not a promise about size, fit, drape, fabric, body shape,
-        or unseen garment details.
+        Generate instant AI virtual try-on visualizations using your reference photo.
       </p>
       </div>
 
@@ -356,8 +354,8 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
             <h3 id="preview-request-heading">{outfit.title}</h3>
             <p>
               {selectedProfile
-                ? "The selected reference photo is scoped to this request. Fit Check will use only the garment assets listed below."
-                : "Choose one consented reference photo above to unlock this request."}
+                ? "Reference photo ready for try-on preview generation."
+                : "Choose a consented reference photo above to generate your try-on preview."}
             </p>
           </div>
           <div className="preview-request-action">
@@ -412,8 +410,7 @@ export function TryOnStudio({ outfit, onClearSelection }: TryOnStudioProps) {
       ) : (
         <div className="bento-box bento-col-12">
           <p className="empty-state tryon-empty-state">
-            Choose <strong>Preview on me</strong> from one recommendation above. Fit Check will keep the
-            specific owned garments in view before any preview can be requested.
+            Select <strong>Preview on me</strong> from an outfit recommendation above to get started.
           </p>
         </div>
       )}
@@ -443,14 +440,13 @@ function SelectedOutfitCard({
         <>
           <p className="selected-look-reasoning">{outfit.reasoning}</p>
           <p className="source-disclosure">
-            This request is locked to these approved owned garments. Selecting a preview never adds,
-            replaces, or reconstructs closet inventory.
+            Garment pieces selected for this look:
           </p>
           <SourceGarmentCards garments={sources} />
           <button className="text-button" onClick={onClearSelection} type="button">Choose a different look</button>
         </>
       ) : (
-        <p className="empty-panel-copy">The weather-aware planner will provide the look selection here.</p>
+        <p className="empty-panel-copy">Select an outfit recommendation above to preview it.</p>
       )}
     </section>
   );
@@ -493,8 +489,7 @@ function ReferencePhotoPanel({
         <span className="privacy-badge">Private by default</span>
       </div>
       <p className="reference-copy">
-        Upload only a photo you are authorized to use. It is stored privately and used only when you
-        actively select it for an AI preview. You can remove it independently at any time.
+        Upload a personal photo for AI try-on previews. Stored privately and securely.
       </p>
 
       <form className="reference-upload-form" onSubmit={(event) => void onSubmit(event)}>
@@ -514,8 +509,7 @@ function ReferencePhotoPanel({
         <label className="consent-check">
           <input checked={hasConsent} onChange={(event) => onConsentChange(event.target.checked)} type="checkbox" />
           <span>
-            <strong>I consent to store this personal reference photo privately and use it for the selected AI preview.</strong>
-            <small>I understand the result is a visualization, not a sizing, fit, drape, or body-shape guarantee.</small>
+            <strong>I consent to use this reference photo for AI virtual try-on previews.</strong>
           </span>
         </label>
         <button className="secondary-button" disabled={!referenceFile || !hasConsent || isUploading} type="submit">
@@ -527,7 +521,7 @@ function ReferencePhotoPanel({
         <legend>Choose a saved reference photo for this preview</legend>
         {isLoading ? <p className="inline-loading" role="status">Loading private reference photos…</p> : null}
         {!isLoading && profiles.length === 0 ? (
-          <p className="empty-panel-copy">No reference photo is selected. You can still organize your wardrobe without adding one.</p>
+          <p className="empty-panel-copy">No reference photos uploaded yet.</p>
         ) : null}
         {profiles.map((profile) => {
           const isReady = profile.status === "active";
@@ -600,14 +594,14 @@ function PreviewReview({
 
       {isLoading ? <p className="inline-loading" role="status">Loading preview history for this selected look…</p> : null}
       {!isLoading && !render ? (
-        <p className="empty-state">No AI preview has been requested for this look. Your garment sources remain unchanged.</p>
+        <p className="empty-state">No preview generated yet for this look.</p>
       ) : null}
       {render ? (
         <div className="preview-review-grid">
           <PreviewImage render={render} selectedProfile={selectedProfile} />
           <div className="preview-details">
             <p className="ai-disclosure">
-              <strong>AI-generated preview.</strong> {render.disclosure || "This image is a visualization, not an exact fit or fabric simulation."}
+              <strong>AI Virtual Try-On Visualization</strong>
             </p>
             {render.status === "failed" ? (
               <p className="preview-error-detail">
@@ -640,7 +634,7 @@ function PreviewReview({
           <p className="eyebrow">Exact selected garment sources</p>
           <h4 id="preview-sources-heading">These owned items are the preview input.</h4>
         </div>
-        <p className="source-disclosure">Source evidence remains visible so an AI visualization is never mistaken for verified inventory photography.</p>
+        <p className="source-disclosure">Garment sources used for this preview:</p>
         <SourceGarmentCards garments={previewSources} />
       </section>
 
@@ -678,7 +672,7 @@ function PreviewImage({
         {/* Preview media is an owner-scoped URL; do not pass it to a public optimizer. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img alt="AI-generated preview of the selected outfit" src={render.render_url} />
-        <figcaption>AI-generated visualization · review against source garment evidence</figcaption>
+        <figcaption>AI Try-On Visualization</figcaption>
       </figure>
     );
   }
@@ -688,10 +682,10 @@ function PreviewImage({
       <strong>{render.status === "failed" ? "Preview needs attention" : "Preparing selected preview"}</strong>
       <small>
         {render.status === "failed"
-          ? "No image was accepted or substituted. Your selected sources remain available for retry."
+          ? "Preview generation failed. Please try again."
           : selectedProfile
-            ? "Reference consent confirmed · private render job in progress"
-            : "Waiting for the selected reference photo"}
+            ? "Generating AI preview..."
+            : "Waiting for reference photo"}
       </small>
     </div>
   );
@@ -763,7 +757,7 @@ function ProvenanceDrawer({
       </dl>
       <details>
         <summary>Developer verification details (redacted)</summary>
-        <p>Raw signed URLs, personal-image locations, and prompt text are intentionally omitted here.</p>
+        <p>Technical provenance data.</p>
         <pre>{JSON.stringify(safeManifest, null, 2)}</pre>
       </details>
     </section>

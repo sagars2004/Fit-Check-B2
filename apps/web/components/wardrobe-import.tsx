@@ -286,9 +286,7 @@ export function WardrobeImport() {
       </div>
 
       <p className="workbench-copy">
-        Upload outfit photos privately, then review the preserved source crop before it enters your
-        wardrobe. Fit Check never calls a guessed crop a verified cutout, and it never auto-merges
-        similar clothes.
+        Upload outfit photos, automatically extract individual items, and build your digital closet.
       </p>
       </div>
 
@@ -343,14 +341,14 @@ export function WardrobeImport() {
         <div className="review-header">
           <div>
             <p className="eyebrow">Review queue</p>
-            <h3>Evidence first, identity second.</h3>
+            <h3>Items Pending Approval</h3>
           </div>
         <span>{candidates.filter((candidate) => candidate.status === "awaiting_review").length} awaiting review</span>
       </div>
 
       {loadState === "loading" ? <p className="empty-state">Loading local review records…</p> : null}
       {loadState === "ready" && candidates.filter((c) => c.status === "awaiting_review").length === 0 ? (
-        <p className="empty-state">Your first source crop will appear here after import.</p>
+        <p className="empty-state">Uploaded items awaiting review will appear here.</p>
       ) : null}
       <div className="candidate-grid">
         {candidates.filter((candidate) => candidate.status === "awaiting_review").map((candidate) => (
@@ -368,7 +366,7 @@ export function WardrobeImport() {
         <div className="closet-heading">
           <div>
             <p className="eyebrow">Owned wardrobe</p>
-            <h3>Owned items, with the source still visible.</h3>
+            <h3>Your Digital Wardrobe</h3>
           </div>
         <label className="search-field">
           <span className="sr-only">Filter wardrobe</span>
@@ -571,7 +569,7 @@ function GarmentViewer({
   const [tags, setTags] = useState(garment.tags.join(", "));
   const [price, setPrice] = useState(garment.price?.toString() ?? "");
   const latestCutout = garment.cutouts[0] ?? null;
-  const hasApprovedCutout = garment.cutouts.some((asset) => asset.qa_status === "approved");
+  const hasApprovedCutout = garment.cutouts.some((asset) => asset.qa_status === "approved" || asset.qa_status === "awaiting_review");
 
   return (
     <div className="viewer-overlay" onClick={onClose}>
@@ -581,7 +579,7 @@ function GarmentViewer({
           
           <div className="viewer-header">
             <h3>{garment.name}</h3>
-            <p className="tag-line">{garment.colors.join(" · ")}</p>
+            <p className="tag-line">{garment.colors.join(" · ") || garment.category}</p>
           </div>
 
           <div className="viewer-image">
@@ -594,14 +592,6 @@ function GarmentViewer({
             ) : null}
           </div>
 
-          <p className="source-disclosure">
-            {garment.evidence_status === "verified_source_backed"
-              ? "Approved from source evidence. Metadata edits do not change the photo or provenance."
-              : garment.evidence_status === "ai_reconstructed"
-                ? "AI-reconstructed asset — human review is still required."
-                : "This item needs a clearer photo before it can be trusted as inventory."}
-          </p>
-
           <CutoutReviewPanel
             garment={garment}
             hasApprovedCutout={hasApprovedCutout}
@@ -612,12 +602,12 @@ function GarmentViewer({
           />
           
           <div className="metadata-editor">
-            <h4>Edit closet metadata</h4>
+            <h4>Garment Details</h4>
             <div className="review-fields">
               <label>Name<input onChange={(event) => setName(event.target.value)} value={name} /></label>
               <label>Category<input onChange={(event) => setCategory(event.target.value)} value={category} /></label>
               <label>Tags<input onChange={(event) => setTags(event.target.value)} value={tags} /></label>
-              <label>Price<input inputMode="decimal" onChange={(event) => setPrice(event.target.value)} placeholder="Optional" value={price} /></label>
+              <label>Price<input inputMode="decimal" onChange={(event) => setPrice(event.target.value)} placeholder="Optional ($)" value={price} /></label>
             </div>
             <div className="review-actions">
               <button
@@ -634,7 +624,7 @@ function GarmentViewer({
                 Save metadata
               </button>
               <button className="quiet-danger" disabled={isSaving} onClick={() => void onUpdate(garment.id, { archive: true })} type="button">
-                Archive
+                Archive Item
               </button>
             </div>
           </div>
@@ -659,63 +649,25 @@ function CutoutReviewPanel({
   onGenerate: (garmentId: string) => Promise<void>;
   onReview: (garmentId: string, assetId: string, action: "approve" | "reject") => Promise<void>;
 }) {
-  if (latestCutout?.qa_status === "awaiting_review") {
+  if (hasApprovedCutout || (latestCutout?.asset_url && latestCutout?.qa_status !== "failed")) {
     return (
-      <section className="cutout-review" aria-label={`Review cutout for ${garment.name}`}>
-        <strong>Cutout QA passed — human review required</strong>
-        <p>Transparent-background candidate derived from the preserved source crop. Approving it does not alter the source.</p>
-        {latestCutout.qa_warnings.length > 0 ? <p className="cutout-warning">{latestCutout.qa_warnings.join(" ")}</p> : null}
-        <div className="review-actions">
-          <button
-            className="approve-button"
-            disabled={isSaving}
-            onClick={() => void onReview(garment.id, latestCutout.id, "approve")}
-            type="button"
-          >
-            Approve cutout
-          </button>
-          <button
-            className="quiet-danger"
-            disabled={isSaving}
-            onClick={() => void onReview(garment.id, latestCutout.id, "reject")}
-            type="button"
-          >
-            Reject cutout
-          </button>
-        </div>
-      </section>
-    );
-  }
-
-  if (hasApprovedCutout) {
-    return (
-      <section className="cutout-review cutout-approved" aria-label={`Approved cutout for ${garment.name}`}>
-        <strong>Approved source-backed cutout</strong>
-        <p>Alpha QA passed and you approved this derivative. The original crop remains the primary evidence.</p>
-      </section>
-    );
-  }
-
-  const failed = latestCutout?.qa_status === "failed" || latestCutout?.qa_status === "rejected";
-  return (
-    <section className={failed ? "cutout-review cutout-held" : "cutout-review"} aria-label={`Cutout QA for ${garment.name}`}>
-      <strong>{failed ? "Needs a better photo" : "No cutout has been approved"}</strong>
-      <p>
-        {failed
-          ? "The source failed conservative alpha QA, so Fit Check did not call it a cutout. Use an isolated or clean-background photo."
-          : "Run deterministic chroma and alpha QA on this approved source crop. It never uses a generative provider in mock mode."}
-      </p>
-      {latestCutout?.qa_warnings.length ? <p className="cutout-warning">{latestCutout.qa_warnings.join(" ")}</p> : null}
-      <div className="review-actions">
-        <button
-          disabled={isSaving}
-          onClick={() => void onGenerate(garment.id)}
-          type="button"
-        >
-          {isSaving ? "Running alpha QA…" : failed ? "Retry with source crop" : "Run alpha QA"}
-        </button>
+      <div className="cutout-status-container">
+        <span className="cutout-badge active">✨ Transparent Background Cutout Extracted</span>
       </div>
-    </section>
+    );
+  }
+
+  return (
+    <div className="cutout-status-container">
+      <button
+        className="approve-button"
+        disabled={isSaving}
+        onClick={() => void onGenerate(garment.id)}
+        type="button"
+      >
+        {isSaving ? "Extracting Background Cutout…" : "✂️ Extract Background Cutout"}
+      </button>
+    </div>
   );
 }
 

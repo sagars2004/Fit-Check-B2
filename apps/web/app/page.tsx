@@ -114,7 +114,19 @@ export default function AppHome() {
             <Gallery />
           </section>
         )}
+
+        <footer className="app-footer">
+          <div className="footer-brand">
+            <div className="footer-brand-title">Fit <span>Check</span></div>
+            <div className="footer-brand-copy">Private AI Wardrobe & Outfit Copilot</div>
+          </div>
+          <div className="footer-tech-stack">
+            <span className="footer-badge">Backblaze B2 Storage</span>
+            <span className="footer-badge">GMI Cloud Inference</span>
+          </div>
+        </footer>
       </main>
     </>
   );
 }
+

@@ -231,8 +231,7 @@ h1 {
 /* Base Sections */
 .wardrobe-workbench, .today-planner, .tryon-studio, .provenance-lab {
   margin-bottom: 64px;
-  padding-bottom: 32px;
-  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
 }
 
 .section-heading, .review-header, .closet-heading, .panel-heading {
@@ -584,6 +583,12 @@ dd {
 .outfit-card:hover {
   border-color: var(--ink);
 }
+
+.outfit-card-selected {
+  border-color: var(--good) !important;
+  background: rgba(28, 122, 93, 0.04);
+}
+
 
 .outfit-card h4 {
   font-size: 1.25rem;
@@ -1174,4 +1179,53 @@ details p, details ul {
 .step-arrow {
   color: var(--muted);
   font-size: 1rem;
+}
+
+/* App Footer */
+.app-footer {
+  margin-top: 64px;
+  padding: 32px 0;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.footer-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.footer-brand-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.footer-brand-title span {
+  color: var(--accent);
+}
+
+.footer-brand-copy {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.footer-tech-stack {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.footer-badge {
+  font-size: 0.75rem;
+  padding: 4px 12px;
+  background: rgba(25, 25, 25, 0.04);
+  border: 1px solid var(--line);
+  border-radius: 9999px;
+  color: var(--ink);
+  font-weight: 500;
 }
