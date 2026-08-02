@@ -1,6 +1,8 @@
 "use client";
 
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { handleImgError } from "../lib/constants";
+
 
 import {
   type ModelProfile,
@@ -671,11 +673,12 @@ function PreviewImage({
       <figure className="preview-image-frame">
         {/* Preview media is an owner-scoped URL; do not pass it to a public optimizer. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img alt="AI-generated preview of the selected outfit" src={render.render_url} />
+        <img alt="AI-generated preview of the selected outfit" src={render.render_url} onError={handleImgError} />
         <figcaption>AI Try-On Visualization</figcaption>
       </figure>
     );
   }
+
   return (
     <div className="preview-image-frame preview-placeholder" role="status">
       <span aria-hidden="true">✦</span>
@@ -719,7 +722,7 @@ function SourceGarmentImage({ garment }: { garment: PreviewSourceGarment }) {
       <div className="tryon-source-image">
         {/* Source thumbnails use private, owner-scoped URLs. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img alt={`Source garment: ${garment.name}`} src={garment.image_url} />
+        <img alt={`Source garment: ${garment.name}`} src={garment.image_url} onError={handleImgError} />
       </div>
     );
   }
@@ -732,10 +735,11 @@ function ReferenceImage({ profile }: { profile: ModelProfile }) {
       <span className="reference-profile-image">
         {/* The personal reference image stays on its scoped owner URL. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img alt="Saved personal reference photo" src={profile.source_image_url} />
+        <img alt="Saved personal reference photo" src={profile.source_image_url} onError={handleImgError} />
       </span>
     );
   }
+
   return <span aria-hidden="true" className="reference-profile-image reference-profile-fallback">✦</span>;
 }
 

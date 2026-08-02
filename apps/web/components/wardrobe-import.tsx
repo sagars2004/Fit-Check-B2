@@ -1,6 +1,8 @@
 "use client";
 
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { handleImgError } from "../lib/constants";
+
 
 import {
   type Candidate,
@@ -745,7 +747,7 @@ function SourceImage({ alt, src }: { alt: string; src: string | null }) {
       {src ? (
         // Source crops are personal/private URLs; do not route them through a public optimizer.
         // eslint-disable-next-line @next/next/no-img-element
-        <img alt={alt} src={src} />
+        <img alt={alt} src={src} onError={handleImgError} />
       ) : <span>Source crop unavailable</span>}
     </div>
   );
@@ -757,11 +759,12 @@ function CutoutImage({ alt, compact = false, src }: { alt: string; compact?: boo
       {src ? (
         // This private signed URL is a source-linked derivative; no public image optimization.
         // eslint-disable-next-line @next/next/no-img-element
-        <img alt={alt} src={src} />
+        <img alt={alt} src={src} onError={handleImgError} />
       ) : <span>Cutout unavailable</span>}
     </div>
   );
 }
+
 
 function splitList(value: string): string[] {
   return value.split(",").map((item) => item.trim()).filter(Boolean);

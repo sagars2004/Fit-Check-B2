@@ -1,6 +1,8 @@
 "use client";
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { handleImgError } from "../lib/constants";
+
 
 import {
   type Garment,
@@ -354,7 +356,7 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
                 <div className="custom-item-mini-card">
                   {selectedTopGarment.source_crop_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={selectedTopGarment.source_crop_url} alt={selectedTopGarment.name} className="mini-garment-thumb" />
+                    <img src={selectedTopGarment.source_crop_url} alt={selectedTopGarment.name} className="mini-garment-thumb" onError={handleImgError} />
                   ) : (
                     <span className="mini-thumb-fallback">👕</span>
                   )}
@@ -389,10 +391,11 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
                 <div className="custom-item-mini-card">
                   {selectedBottomGarment.source_crop_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={selectedBottomGarment.source_crop_url} alt={selectedBottomGarment.name} className="mini-garment-thumb" />
+                    <img src={selectedBottomGarment.source_crop_url} alt={selectedBottomGarment.name} className="mini-garment-thumb" onError={handleImgError} />
                   ) : (
                     <span className="mini-thumb-fallback">👖</span>
                   )}
+
                   <div>
                     <strong>{selectedBottomGarment.name}</strong>
                     <small>{humanize(selectedBottomGarment.category)} · {selectedBottomGarment.colors.join(", ") || "Approved"}</small>

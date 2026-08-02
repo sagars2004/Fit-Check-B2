@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { deleteRender, getAllRenders, type TryOnRender } from "../lib/api";
+import { handleImgError } from "../lib/constants";
+
 
 export function Gallery() {
   const [renders, setRenders] = useState<TryOnRender[]>([]);
@@ -61,6 +63,7 @@ export function Gallery() {
             src={render.render_url ?? ""}
             alt="AI Preview"
             className="gallery-main-image"
+            onError={handleImgError}
           />
           <div className="gallery-overlay">
             <button
@@ -80,11 +83,13 @@ export function Gallery() {
                     src={garment.image_url ?? ""}
                     alt={garment.name}
                     title={garment.name}
+                    onError={handleImgError}
                   />
                 </div>
               ))}
             </div>
           </div>
+
         </div>
       ))}
     </div>
