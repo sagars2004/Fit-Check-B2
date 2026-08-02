@@ -1029,7 +1029,10 @@ class MilestoneOneWorkflow:
             metadata={"upload-id": upload.id, "candidate-id": candidate_id, "role": "source-crop"},
         )
         color = approximate_color_name(crop)
-        category, name_suggestion = _infer_fallback_category(crop, upload.width, upload.height)
+        filename = str(upload.immutable_metadata.get("filename") or "")
+        category, name_suggestion = _infer_fallback_category(
+            crop, upload.width, upload.height, filename=filename
+        )
         candidate = GarmentCandidate(
             id=candidate_id,
             upload_id=upload.id,
@@ -1416,13 +1419,78 @@ def _import_stages(status: str) -> list[str]:
     return ordered[: index + 1]
 
 
-def _infer_fallback_category(crop_bytes: bytes, width: int, height: int) -> tuple[str, str]:
+def _infer_fallback_category(
+    crop_bytes: bytes, width: int, height: int, filename: str | None = None
+) -> tuple[str, str]:
     """Infer category and suggested name when vision API detection is unconfigured or empty."""
     color = approximate_color_name(crop_bytes)
-    aspect_ratio = float(height) / float(max(1, width))
+    fn = (filename or "").lower()
 
-    # Very tall aspect ratio (height >= 1.55x width) strongly correlates with pants/trousers
-    if aspect_ratio >= 1.55:
+    # 1. Filename keyword matching
+    if any(
+        k in fn
+        for k in (
+            "top",
+            "shirt",
+            "tee",
+            "t-shirt",
+            "hoodie",
+            "sweater",
+            "blouse",
+            "tank",
+            "polo",
+        )
+    ):
+        return "top", f"{color.title()} top"
+    if any(
+        k in fn
+        for k in (
+            "pant",
+            "jean",
+            "trouser",
+            "short",
+            "skirt",
+            "bottom",
+            "denim",
+            "slacks",
+            "legging",
+            "chino",
+        )
+    ):
+        return "bottom", f"{color.title()} pants"
+    if any(
+        k in fn
+        for k in (
+            "shoe",
+            "boot",
+            "sneaker",
+            "loafer",
+            "sandal",
+            "heel",
+            "footwear",
+            "cleat",
+        )
+    ):
+        return "footwear", f"{color.title()} footwear"
+    if any(
+        k in fn
+        for k in (
+            "jacket",
+            "coat",
+            "blazer",
+            "parka",
+            "cardigan",
+            "trench",
+            "windbreaker",
+        )
+    ):
+        return "outerwear", f"{color.title()} jacket"
+    if any(k in fn for k in ("dress", "gown", "frock", "jumpsuit")):
+        return "dress", f"{color.title()} dress"
+
+    # 2. Aspect ratio detection: photos taller than 1.05:1 correlate with pants/trousers
+    aspect_ratio = float(height) / float(max(1, width))
+    if aspect_ratio >= 1.05:
         return "bottom", f"{color.title()} pants"
     elif aspect_ratio <= 0.8:
         is_shoe_color = color in ("black", "brown", "white", "gray", "beige")

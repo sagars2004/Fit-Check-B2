@@ -32,7 +32,6 @@ async def extract_garments_with_vision(
     if not settings.has_gmi_credentials():
         return []
 
-    vision_model = settings.gmi_vision_model or "Qwen/Qwen3.6-Max-Preview"
     api_key = settings.gmi_api_key.get_secret_value() if settings.gmi_api_key else ""
     endpoint = f"{settings.gmi_llm_base_url.rstrip('/')}/chat/completions"
     headers = {
@@ -66,66 +65,82 @@ async def extract_garments_with_vision(
         f"Image dimensions are width={width}, height={height}."
     )
 
-    body = {
-        "model": vision_model,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt},
-                    {"type": "image_url", "image_url": {"url": data_url}},
-                ],
-            }
-        ],
-        "temperature": 0.2,
-        "max_tokens": 1000,
-    }
+    models_to_try = list(
+        dict.fromkeys(
+            [
+                settings.gmi_vision_model,
+                "Qwen/Qwen3.6-Max-Preview",
+                "Qwen/Qwen2.5-VL-72B-Instruct",
+                "Qwen/Qwen2-VL-72B-Instruct",
+            ]
+        )
+    )
 
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(endpoint, headers=headers, json=body)
-            if resp.status_code != 200:
-                print(f"GMI Vision API Error {resp.status_code}: {resp.text}")
-                return []
-            res_data = resp.json()
-            content = res_data["choices"][0]["message"]["content"]
-            # Extract JSON from markdown fences if present
-            if "```json" in content:
-                content = content.split("```json")[1].split("```")[0].strip()
-            elif "```" in content:
-                content = content.split("```")[1].split("```")[0].strip()
+    for model in models_to_try:
+        if not model:
+            continue
+        body = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                }
+            ],
+            "temperature": 0.2,
+            "max_tokens": 1000,
+        }
 
-            parsed = json.loads(content)
-            items = parsed.get("garments", [])
-            results: list[DetectedGarment] = []
-            for item in items:
-                bbox_raw = item.get("bbox", {})
-                left = float(bbox_raw.get("left", 0))
-                top = float(bbox_raw.get("top", 0))
-                right = float(bbox_raw.get("right", width))
-                bottom = float(bbox_raw.get("bottom", height))
-                # Clamp coordinates to image boundaries
-                left = max(0.0, min(left, float(width)))
-                top = max(0.0, min(top, float(height)))
-                right = max(left + 10.0, min(right, float(width)))
-                bottom = max(top + 10.0, min(bottom, float(height)))
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(endpoint, headers=headers, json=body)
+                if resp.status_code != 200:
+                    print(f"GMI Vision API Error ({model}) {resp.status_code}: {resp.text}")
+                    continue
+                res_data = resp.json()
+                content = res_data["choices"][0]["message"]["content"]
+                # Extract JSON from markdown fences if present
+                if "```json" in content:
+                    content = content.split("```json")[1].split("```")[0].strip()
+                elif "```" in content:
+                    content = content.split("```")[1].split("```")[0].strip()
 
-                results.append(
-                    DetectedGarment(
-                        name_suggestion=str(item.get("name_suggestion", "Extracted Garment")),
-                        category=str(item.get("category", "top")).lower(),
-                        colors=[str(c) for c in item.get("colors", ["unknown"])],
-                        bbox={"left": left, "top": top, "right": right, "bottom": bottom},
-                        apparent_material=str(item.get("apparent_material", "needs review")),
-                        pattern=str(item.get("pattern", "needs review")),
-                        confidence=float(item.get("confidence", 0.8)),
-                        unresolved_details=[str(u) for u in item.get("unresolved_details", [])],
+                parsed = json.loads(content)
+                items = parsed.get("garments", [])
+                results: list[DetectedGarment] = []
+                for item in items:
+                    bbox_raw = item.get("bbox", {})
+                    left = float(bbox_raw.get("left", 0))
+                    top = float(bbox_raw.get("top", 0))
+                    right = float(bbox_raw.get("right", width))
+                    bottom = float(bbox_raw.get("bottom", height))
+                    # Clamp coordinates to image boundaries
+                    left = max(0.0, min(left, float(width)))
+                    top = max(0.0, min(top, float(height)))
+                    right = max(left + 10.0, min(right, float(width)))
+                    bottom = max(top + 10.0, min(bottom, float(height)))
+
+                    results.append(
+                        DetectedGarment(
+                            name_suggestion=str(item.get("name_suggestion", "Extracted Garment")),
+                            category=str(item.get("category", "top")).lower(),
+                            colors=[str(c) for c in item.get("colors", ["unknown"])],
+                            bbox={"left": left, "top": top, "right": right, "bottom": bottom},
+                            apparent_material=str(item.get("apparent_material", "needs review")),
+                            pattern=str(item.get("pattern", "needs review")),
+                            confidence=float(item.get("confidence", 0.8)),
+                            unresolved_details=[str(u) for u in item.get("unresolved_details", [])],
+                        )
                     )
-                )
-            return results
-    except Exception as e:
-        import traceback
+                if results:
+                    return results
+        except Exception as e:
+            import traceback
 
-        traceback.print_exc()
-        print(f"GMI Vision API Exception: {e}")
-        return []
+            traceback.print_exc()
+            print(f"GMI Vision API Exception ({model}): {e}")
+
+    return []
