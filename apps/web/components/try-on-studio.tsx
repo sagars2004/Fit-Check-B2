@@ -583,10 +583,10 @@ function PreviewReview({
   selectedProfile: ModelProfile | null;
 }) {
   return (
-    <section className="preview-review bento-box bento-cinematic bento-col-12" aria-labelledby="preview-review-heading">
-      <div className="review-header" style={{ padding: '32px 32px 0' }}>
+    <section className="preview-review bento-box bento-col-12" aria-labelledby="preview-review-heading">
+      <div className="review-header">
         <div>
-          <p className="eyebrow">Review the selected preview</p>
+          <p className="eyebrow">Virtual Try-On Result</p>
           <h3 id="preview-review-heading">{render ? previewStatusLabel(render.status) : "No preview requested"}</h3>
         </div>
         {render ? <span className={previewStatusClass(render.status)}>{humanize(render.status)}</span> : null}
@@ -629,12 +629,11 @@ function PreviewReview({
       ) : null}
       {render ? <PreviewProgress status={render.status} /> : null}
 
-      <section className="preview-source-section" aria-labelledby="preview-sources-heading">
+      <section className="preview-source-section" aria-labelledby="preview-sources-heading" style={{ marginTop: '24px', paddingTop: '24px', borderTop: '1px solid var(--line)' }}>
         <div>
           <p className="eyebrow">Exact selected garment sources</p>
-          <h4 id="preview-sources-heading">These owned items are the preview input.</h4>
+          <h4 id="preview-sources-heading">Garment items used for this look</h4>
         </div>
-        <p className="source-disclosure">Garment sources used for this preview:</p>
         <SourceGarmentCards garments={previewSources} />
       </section>
 
@@ -642,6 +641,7 @@ function PreviewReview({
     </section>
   );
 }
+
 
 function PreviewProgress({ status }: { status: string }) {
   const ready = status === "preview_ready";

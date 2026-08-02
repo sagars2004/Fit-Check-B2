@@ -825,30 +825,98 @@ details p, details ul {
 .preview-image-frame {
   margin: 0;
   border: 1px solid var(--line);
-  padding: 16px;
+  padding: 12px;
+  border-radius: 16px;
   background: rgba(25, 25, 25, 0.02);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
 }
-.preview-image-frame img { width: 100%; height: auto; }
+
+.preview-image-frame img {
+  width: 100%;
+  max-height: 520px;
+  object-fit: contain;
+  border-radius: 12px;
+  display: block;
+}
+
 .preview-image-frame figcaption {
   font-size: 0.75rem;
   color: var(--muted);
   text-align: center;
-  margin-top: 8px;
+  margin-top: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }
+
 .preview-placeholder {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 400px;
+  min-height: 380px;
   gap: 8px;
+  background: rgba(25, 25, 25, 0.02);
+  border-radius: 16px;
+  border: 1px dashed var(--line);
 }
+
 .preview-review-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 32px;
-  margin-top: 32px;
+  align-items: start;
+  margin-top: 16px;
 }
+
+.preview-details {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px;
+  background: rgba(25, 25, 25, 0.02);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.preview-details .ai-disclosure {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+}
+
+.preview-metadata {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.preview-metadata div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.875rem;
+}
+
+.preview-metadata dt {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.preview-metadata dd {
+  color: var(--ink);
+  font-weight: 600;
+  margin: 0;
+  text-align: right;
+}
+
 
 
 /* Viewer Overlay (Slide-Out Drawer) */
@@ -992,44 +1060,8 @@ details p, details ul {
   background: rgba(25, 25, 25, 0.06);
 }
 
-/* Cinematic Box for Try-on Previews */
-.bento-cinematic {
-  padding: 0; 
-  background: #111;
-  color: #fff;
-  border: none;
-}
-.bento-cinematic:hover {
-  transform: none;
-}
-.bento-cinematic .preview-image-frame {
-  border: none;
-  background: transparent;
-  padding: 0;
-  margin: 0;
-}
-.bento-cinematic .preview-image-frame img {
-  border-radius: 24px 24px 0 0;
-  display: block;
-}
-.bento-cinematic .preview-details {
-  padding: 32px;
-}
-.bento-cinematic .ai-disclosure {
-  color: rgba(255, 255, 255, 0.8);
-}
-.bento-cinematic dt {
-  color: rgba(255, 255, 255, 0.5);
-}
-.bento-cinematic dd {
-  color: rgba(255, 255, 255, 0.9);
-}
-.bento-cinematic .review-header h3 {
-  color: #fff;
-}
-.bento-cinematic .eyebrow {
-  color: rgba(255, 255, 255, 0.7);
-}
+/* Removed old black cinematic styles */
+
 
 /* Forms inside Bento */
 .bento-box .today-context {
