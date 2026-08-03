@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings
+from app.core.config import Settings, StorageMode
 from app.core.errors import FitCheckError
 from app.db.models import Garment, GarmentAsset, GarmentEvidence, ProvenanceLink, User
 from app.domain.enums import AssetEvidenceStatus, GarmentStatus
@@ -299,7 +299,11 @@ class MilestoneFourDemoWorkflow:
         )
 
     def _assert_local_mock_mode(self) -> None:
-        pass
+        if self.settings.storage_mode is not StorageMode.LOCAL or not self.settings.is_mock:
+            raise FitCheckError(
+                "DEMO_ENDPOINT_DISABLED",
+                "The /v1/demo/seed endpoint is disabled outside local mock mode.",
+            )
 
 
     async def _ensure_demo_user(self, session: AsyncSession) -> tuple[User, bool]:

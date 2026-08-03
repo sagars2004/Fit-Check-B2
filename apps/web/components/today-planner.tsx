@@ -209,43 +209,46 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
       </p>
       </div>
 
-      <div className="bento-box bento-col-4">
+      <div className="bento-box bento-col-12">
         <div className="panel-heading">
           <h3>Plan a look</h3>
         </div>
-      <form className="today-context" onSubmit={(event) => void handlePlan(event)}>
-        <label>
-          Location
-          <input onChange={(event) => setLocation(event.target.value)} placeholder="e.g. New York, NY" value={location} />
-        </label>
-        <label>
-          Date
-          <input onChange={(event) => setForecastDate(event.target.value)} type="date" value={forecastDate} />
-        </label>
-        <label className="occasion-field">
-          Occasion or context
-          <input
-            onChange={(event) => setOccasion(event.target.value)}
-            placeholder="e.g. Rainy commute, dinner after work"
-            value={occasion}
-          />
-        </label>
-        <label className="utilization-toggle">
-          <input
-            checked={utilizationMode}
-            onChange={(event) => setUtilizationMode(event.target.checked)}
-            type="checkbox"
-          />
-          <span>
-            <strong>Utilization mode</strong>
-            <small>Prioritize less-worn items.</small>
-          </span>
-        </label>
-        <button className="primary-button" disabled={isPlanning} type="submit">
-          {isPlanning ? "Planning owned looks…" : "Plan three looks"}
-        </button>
-      </form>
-
+        <form className="today-context today-context-full" onSubmit={(event) => void handlePlan(event)}>
+          <div className="today-context-fields">
+            <label>
+              Location
+              <input onChange={(event) => setLocation(event.target.value)} placeholder="e.g. New York, NY" value={location} />
+            </label>
+            <label>
+              Date
+              <input onChange={(event) => setForecastDate(event.target.value)} type="date" value={forecastDate} />
+            </label>
+            <label className="occasion-field">
+              Occasion or context
+              <input
+                onChange={(event) => setOccasion(event.target.value)}
+                placeholder="e.g. Rainy commute, dinner after work"
+                value={occasion}
+              />
+            </label>
+          </div>
+          <div className="today-context-actions">
+            <label className="utilization-toggle">
+              <input
+                checked={utilizationMode}
+                onChange={(event) => setUtilizationMode(event.target.checked)}
+                type="checkbox"
+              />
+              <span>
+                <strong>Utilization mode</strong>
+                <small>Prioritize less-worn items.</small>
+              </span>
+            </label>
+            <button className="primary-button" disabled={isPlanning} type="submit">
+              {isPlanning ? "Planning owned looks…" : "Plan three looks"}
+            </button>
+          </div>
+        </form>
       </div>
 
       {(notice || error) ? (
@@ -255,9 +258,8 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
         </div>
       ) : null}
 
-      <div className="bento-box bento-col-8">
       {recommendation ? (
-        <>
+        <div className="bento-box bento-col-12">
           <section className="forecast-card" aria-label="Forecast context" style={{ border: 'none', margin: 0, padding: 0 }}>
             <div>
               <p className="eyebrow">Forecast</p>
@@ -273,18 +275,13 @@ export function TodayPlanner({ onPreviewOutfit, selectedPreviewOutfitId = null }
           </section>
 
           {recommendation.warnings.length > 0 ? (
-            <section className="planner-warnings" aria-label="Wardrobe coverage notes">
+            <section className="planner-warnings" aria-label="Wardrobe coverage notes" style={{ marginTop: '16px' }}>
               <strong>Wardrobe coverage note</strong>
               <ul>{recommendation.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
             </section>
           ) : null}
-        </>
-      ) : (
-        <p className="empty-state" role="status" style={{ margin: 'auto' }}>
-          Select a location, date, and occasion to get personalized outfit recommendations.
-        </p>
-      )}
-      </div>
+        </div>
+      ) : null}
 
       {recommendation ? (
         <div className="bento-box bento-col-12">

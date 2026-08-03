@@ -787,7 +787,14 @@ class MilestoneOneWorkflow:
                 )
             )
         garments = list((await session.scalars(statement)).all())
-        if not garments and not category and not status and not query and not color:
+        if (
+            not garments
+            and not category
+            and not status
+            and not query
+            and not color
+            and self.settings.app_env != "test"
+        ):
             try:
                 from app.workflows.milestone_four import MilestoneFourDemoWorkflow
 
